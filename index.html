@@ -38,6 +38,11 @@
   .field label{display:flex; justify-content:space-between; font-size:13px; font-weight:600; margin-bottom:6px;}
   .field label span.val{font-weight:400; color:var(--accent);}
   input[type=range]{width:100%;}
+  .field-row{display:flex; gap:10px;}
+  input[type=number]{
+    width:100%; padding:7px 8px; border:1px solid var(--border); border-radius:5px;
+    font-size:13px; color:var(--ink); background:#fff;
+  }
   .toggle-row{display:flex; align-items:center; justify-content:space-between; font-size:13px; margin-bottom:16px;}
   .smoothing-desc{font-size:11px; color:var(--muted); margin-top:2px;}
   button{
@@ -101,7 +106,31 @@
     </div>
     <div class="status" id="imageStatus"></div>
 
-    <h2 style="margin-top:18px;">2. Settings</h2>
+    <h2 style="margin-top:18px;">2. Resize &amp; Crop</h2>
+    <div class="toggle-row">
+      <label for="resizeEnabled">Resize &amp; crop to a fixed size</label>
+      <input type="checkbox" id="resizeEnabled" style="width:18px;height:18px;flex:0 0 18px;">
+    </div>
+    <div class="hint" id="resizeHint" style="margin-top:-8px;">Off by default &mdash; the original image is used at its native resolution with no cropping.</div>
+    <div id="resizeFields" style="display:none;">
+      <div class="field-row">
+        <div class="field" style="flex:1;">
+          <label>Width (in) <span></span></label>
+          <input type="number" id="targetWidthIn" min="0.1" step="0.1" value="8">
+        </div>
+        <div class="field" style="flex:1;">
+          <label>Height (in) <span></span></label>
+          <input type="number" id="targetHeightIn" min="0.1" step="0.1" value="10">
+        </div>
+      </div>
+      <div class="field">
+        <label>Resolution (DPI) <span></span></label>
+        <input type="number" id="targetDpi" min="10" step="10" value="150">
+      </div>
+      <div class="smoothing-desc">The image is center-cropped to match the target width:height aspect ratio, then scaled to exactly Width×DPI by Height×DPI pixels.</div>
+    </div>
+
+    <h2 style="margin-top:18px;">3. Settings</h2>
     <div class="field">
       <label>Number of Colors <span class="val" id="colorCountVal">12</span></label>
       <input type="range" id="colorCount" min="5" max="30" value="12" step="1">
@@ -180,6 +209,11 @@
   const smoothingVal  = document.getElementById('smoothingVal');
   const coloringMode  = document.getElementById('coloringMode');
   const showNumbers   = document.getElementById('showNumbers');
+  const resizeEnabled = document.getElementById('resizeEnabled');
+  const resizeFields  = document.getElementById('resizeFields');
+  const targetWidthIn = document.getElementById('targetWidthIn');
+  const targetHeightIn= document.getElementById('targetHeightIn');
+  const targetDpi     = document.getElementById('targetDpi');
   const generateBtn   = document.getElementById('generateBtn');
   const saveBtn       = document.getElementById('saveBtn');
   const genStatus     = document.getElementById('genStatus');
@@ -204,6 +238,10 @@
     return v + ' (' + tier + ')';
   }
   smoothingVal.textContent = smoothingLabel(+smoothingEl.value);
+
+  resizeEnabled.addEventListener('change', () => {
+    resizeFields.style.display = resizeEnabled.checked ? 'block' : 'none';
+  });
 
   dropzone.addEventListener('click', () => fileInput.click());
   dropzone.addEventListener('dragover', e => { e.preventDefault(); dropzone.classList.add('drag'); });
@@ -410,13 +448,34 @@
     const smoothing = +smoothingEl.value; // 0-100
     const printable = coloringMode.checked;
 
-    const w = srcW, h = srcH;
+    // --- optional resize & crop to a fixed physical size (inches @ DPI) ---
+    // Default (unchecked) leaves the image at its native resolution with no
+    // cropping at all, matching the original full-resolution behavior.
+    let w = srcW, h = srcH;
+    let cropSx = 0, cropSy = 0, cropSw = srcW, cropSh = srcH;
+    if (resizeEnabled.checked){
+      const wIn = Math.max(0.1, +targetWidthIn.value || 0);
+      const hIn = Math.max(0.1, +targetHeightIn.value || 0);
+      const dpi = Math.max(10, +targetDpi.value || 0);
+      w = Math.max(1, Math.round(wIn * dpi));
+      h = Math.max(1, Math.round(hIn * dpi));
+      // center-crop the source to the target aspect ratio ("cover" fit)
+      const targetAspect = w / h;
+      const srcAspect = srcW / srcH;
+      if (srcAspect > targetAspect){
+        cropSh = srcH; cropSw = srcH * targetAspect;
+      } else {
+        cropSw = srcW; cropSh = srcW / targetAspect;
+      }
+      cropSx = (srcW - cropSw) / 2;
+      cropSy = (srcH - cropSh) / 2;
+    }
 
-    // --- draw original at native resolution ---
+    // --- draw the (possibly cropped/resized) image onto the working canvas ---
     const srcCanvas = document.createElement('canvas');
     srcCanvas.width = w; srcCanvas.height = h;
     const sctx = srcCanvas.getContext('2d');
-    sctx.drawImage(sourceImage, 0, 0, w, h);
+    sctx.drawImage(sourceImage, cropSx, cropSy, cropSw, cropSh, 0, 0, w, h);
     let imgData = sctx.getImageData(0, 0, w, h);
     let data = imgData.data;
 
