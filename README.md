@@ -28,7 +28,7 @@ Numbers are placed at the most interior point of each region — the spot farthe
 
 ## Style options
 
-A "printable coloring-page style" option switches the output between a colored preview with outlines and numbers, or a clean white background with only outlines and numbers — the latter is meant for printing and hand-coloring.
+A "printable coloring-page style" option switches the output between a colored preview with outlines and numbers, or a clean white background with only outlines and numbers for printing and painting.
 
 ## Resizing and cropping
 
@@ -36,11 +36,11 @@ An optional resize-and-crop feature lets you target a specific physical print si
 
 ## Saving your results
 
-A save action downloads two PNG files: the paint-by-numbers image itself, and a separate palette legend image suitable for reference while painting. A third file with the plain color preview is also included for convenience.
+A save action downloads three PNG files: the paint-by-numbers image itself, the palette legend for reference while painting, and the posterized color preview.
 
 ## Re-running with different settings
 
-Color count, smoothing, style, and number visibility can all be adjusted and re-generated as many times as you like without re-uploading the image, so you can quickly compare different levels of detail and simplification.
+Resize and crop, color count, smoothing, style, and number visibility can all be adjusted and re-generated as many times as you like without re-uploading the image, so you can quickly compare different levels of detail and simplification.
 
 ## 
 
