@@ -1,0 +1,758 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Paint-by-Numbers Generator</title>
+<style>
+  :root{
+    --bg:#f4f2ee; --panel:#ffffff; --ink:#2b2a28; --accent:#c05a2c; --accent2:#3d6b5c;
+    --border:#dcd7cf; --muted:#7a746b;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0; font-family:'Segoe UI',system-ui,-apple-system,Arial,sans-serif;
+    background:var(--bg); color:var(--ink);
+  }
+  header{
+    padding:20px 28px; background:var(--panel); border-bottom:1px solid var(--border);
+  }
+  header h1{margin:0; font-size:22px; letter-spacing:.3px;}
+  header p{margin:4px 0 0; color:var(--muted); font-size:13px;}
+  .layout{
+    display:flex; gap:20px; padding:20px 28px; align-items:flex-start; flex-wrap:wrap;
+  }
+  .panel{
+    background:var(--panel); border:1px solid var(--border); border-radius:10px;
+    padding:18px; box-shadow:0 1px 3px rgba(0,0,0,0.04);
+  }
+  .controls{width:300px; flex:0 0 300px; position:sticky; top:20px;}
+  .controls h2{font-size:14px; text-transform:uppercase; letter-spacing:.06em; color:var(--muted); margin:0 0 12px;}
+  .dropzone{
+    border:2px dashed var(--border); border-radius:8px; padding:22px 12px; text-align:center;
+    color:var(--muted); font-size:13px; cursor:pointer; transition:.15s; margin-bottom:14px;
+  }
+  .dropzone.drag{border-color:var(--accent); background:#fbf1ea; color:var(--accent);}
+  .dropzone input{display:none;}
+  .field{margin-bottom:16px;}
+  .field label{display:flex; justify-content:space-between; font-size:13px; font-weight:600; margin-bottom:6px;}
+  .field label span.val{font-weight:400; color:var(--accent);}
+  input[type=range]{width:100%;}
+  .toggle-row{display:flex; align-items:center; justify-content:space-between; font-size:13px; margin-bottom:16px;}
+  .smoothing-desc{font-size:11px; color:var(--muted); margin-top:2px;}
+  button{
+    width:100%; padding:10px 12px; border-radius:6px; border:none; font-size:14px;
+    font-weight:600; cursor:pointer; margin-bottom:10px; transition:.15s;
+  }
+  button.primary{background:var(--accent); color:#fff;}
+  button.primary:hover{background:#a94b22;}
+  button.secondary{background:var(--accent2); color:#fff;}
+  button.secondary:hover{background:#2e5548;}
+  button:disabled{opacity:.5; cursor:not-allowed;}
+  .status{font-size:12px; color:var(--muted); min-height:16px; margin-top:4px;}
+  .outputs{flex:1; min-width:320px; display:flex; flex-direction:column; gap:20px;}
+  .canvas-wrap{overflow:auto; max-height:640px; border:1px solid var(--border); border-radius:8px; background:#fafafa; padding:10px;}
+  .canvas-wrap canvas{display:block; max-width:100%; image-rendering:pixelated;}
+  .canvas-wrap canvas.fitwidth{width:100%; height:auto; image-rendering:auto;}
+  .section-title{font-size:14px; font-weight:700; margin:0 0 8px;}
+  .palette-grid{
+    display:grid; grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); gap:10px;
+  }
+  .swatch{
+    display:flex; align-items:center; gap:8px; border:1px solid var(--border); border-radius:6px;
+    padding:6px 8px; background:#fff;
+  }
+  .swatch .chip{
+    width:28px; height:28px; border-radius:5px; border:1px solid rgba(0,0,0,.15); flex:0 0 28px;
+    display:flex; align-items:center; justify-content:center; font-size:12px; font-weight:700; color:#fff;
+    text-shadow:0 0 2px rgba(0,0,0,.6);
+  }
+  .swatch .info{font-size:11px; line-height:1.35;}
+  .swatch .info .hex{font-weight:700;}
+  .overlay{
+    position:fixed; inset:0; background:rgba(255,255,255,.85); display:none;
+    align-items:center; justify-content:center; flex-direction:column; z-index:999;
+  }
+  .overlay.show{display:flex;}
+  .spinner{
+    width:46px; height:46px; border:5px solid var(--border); border-top-color:var(--accent);
+    border-radius:50%; animation:spin 0.9s linear infinite; margin-bottom:14px;
+  }
+  @keyframes spin{to{transform:rotate(360deg);}}
+  .overlay p{font-size:14px; color:var(--ink); margin:0;}
+  .hint{font-size:11px; color:var(--muted); margin-top:-4px; margin-bottom:14px;}
+  footer{text-align:center; font-size:11px; color:var(--muted); padding:20px;}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>&#127912; Paint-by-Numbers Generator</h1>
+  <p>Upload an image, tune colors &amp; smoothing, and export a printable numbered outline plus its palette legend &mdash; all processed locally in your browser at full resolution.</p>
+</header>
+
+<div class="layout">
+
+  <div class="panel controls">
+    <h2>1. Image</h2>
+    <div class="dropzone" id="dropzone">
+      <div id="dropzoneText">Drag &amp; drop an image here<br>or click to browse<br><span style="font-size:11px;">(JPG, PNG, WEBP)</span></div>
+      <input type="file" id="fileInput" accept="image/jpeg,image/png,image/webp,image/*">
+    </div>
+    <div class="status" id="imageStatus"></div>
+
+    <h2 style="margin-top:18px;">2. Settings</h2>
+    <div class="field">
+      <label>Number of Colors <span class="val" id="colorCountVal">12</span></label>
+      <input type="range" id="colorCount" min="5" max="30" value="12" step="1">
+    </div>
+    <div class="field">
+      <label>Edge Smoothing <span class="val" id="smoothingVal">30 (Low)</span></label>
+      <input type="range" id="smoothing" min="0" max="100" value="30" step="1">
+      <div class="smoothing-desc">Blurs noise before quantizing, smooths jagged region borders after, and merges away tiny stray regions. Higher = simpler, cleaner shapes.</div>
+    </div>
+    <div class="toggle-row">
+      <label for="coloringMode">Printable coloring-page style (white bg + outlines)</label>
+      <input type="checkbox" id="coloringMode" checked style="width:18px;height:18px;flex:0 0 18px;">
+    </div>
+
+    <button class="primary" id="generateBtn" disabled>Generate Paint-by-Numbers</button>
+    <button class="secondary" id="saveBtn" disabled>Save Images (2 files)</button>
+    <div class="status" id="genStatus"></div>
+  </div>
+
+  <div class="outputs">
+    <div class="panel">
+      <p class="section-title">Color Preview (posterized fill)</p>
+      <div class="canvas-wrap"><canvas id="previewCanvas" class="fitwidth"></canvas></div>
+    </div>
+    <div class="panel">
+      <p class="section-title">Paint-by-Numbers Output</p>
+      <div class="canvas-wrap"><canvas id="outlineCanvas" class="fitwidth"></canvas></div>
+    </div>
+    <div class="panel">
+      <p class="section-title">Color Palette / Legend</p>
+      <div class="palette-grid" id="paletteGrid"></div>
+    </div>
+  </div>
+
+</div>
+
+<footer>Everything runs 100% client-side &mdash; no images are uploaded anywhere.</footer>
+
+<div class="overlay" id="overlay"><div class="spinner"></div><p id="overlayText">Processing image&hellip;</p></div>
+
+<!-- Hidden canvas used purely for building the exportable palette-legend PNG -->
+<canvas id="paletteExportCanvas" style="display:none;"></canvas>
+
+<script>
+/* =========================================================================
+   PAINT-BY-NUMBERS GENERATOR
+   Pure client-side pipeline:
+     1. Load image at full native resolution onto a working canvas.
+     2. Pre-blur (box blur) to reduce noise, strength driven by smoothing.
+     3. Convert to CIELAB and run k-means++ clustering to pick a perceptually
+        distinct palette (avoids one dominant hue swallowing rare colors).
+     4. Assign every pixel to its nearest palette color (nearest-LAB).
+     5. Post-quantization mode-filter smoothing on the label map.
+     6. Connected-component labeling + union-find merging of any region
+        smaller than a smoothing-dependent area threshold into its most
+        strongly adjacent neighbor.
+     7. Render: posterized color preview, and paint-by-numbers image with
+        black outlines + numbers (or plain white "coloring page" background).
+     8. Build & export a separate palette-legend PNG.
+   ========================================================================= */
+
+(function(){
+  "use strict";
+
+  // ---------- DOM references ----------
+  const dropzone      = document.getElementById('dropzone');
+  const fileInput     = document.getElementById('fileInput');
+  const imageStatus   = document.getElementById('imageStatus');
+  const colorCountEl  = document.getElementById('colorCount');
+  const colorCountVal = document.getElementById('colorCountVal');
+  const smoothingEl   = document.getElementById('smoothing');
+  const smoothingVal  = document.getElementById('smoothingVal');
+  const coloringMode  = document.getElementById('coloringMode');
+  const generateBtn   = document.getElementById('generateBtn');
+  const saveBtn       = document.getElementById('saveBtn');
+  const genStatus     = document.getElementById('genStatus');
+  const previewCanvas = document.getElementById('previewCanvas');
+  const outlineCanvas = document.getElementById('outlineCanvas');
+  const paletteGrid    = document.getElementById('paletteGrid');
+  const overlay        = document.getElementById('overlay');
+  const overlayText     = document.getElementById('overlayText');
+  const paletteExportCanvas = document.getElementById('paletteExportCanvas');
+
+  // ---------- App state ----------
+  let sourceImage = null;   // Image object
+  let srcW = 0, srcH = 0;
+  let lastPalette = [];     // [{r,g,b,hex}] used for exports/legend
+
+  // ---------- UI wiring ----------
+  colorCountEl.addEventListener('input', () => colorCountVal.textContent = colorCountEl.value);
+  smoothingEl.addEventListener('input', () => smoothingVal.textContent = smoothingLabel(+smoothingEl.value));
+
+  function smoothingLabel(v){
+    let tier = v < 20 ? 'None' : v < 45 ? 'Low' : v < 75 ? 'Medium' : 'High';
+    return v + ' (' + tier + ')';
+  }
+  smoothingVal.textContent = smoothingLabel(+smoothingEl.value);
+
+  dropzone.addEventListener('click', () => fileInput.click());
+  dropzone.addEventListener('dragover', e => { e.preventDefault(); dropzone.classList.add('drag'); });
+  dropzone.addEventListener('dragleave', () => dropzone.classList.remove('drag'));
+  dropzone.addEventListener('drop', e => {
+    e.preventDefault(); dropzone.classList.remove('drag');
+    if (e.dataTransfer.files && e.dataTransfer.files[0]) loadFile(e.dataTransfer.files[0]);
+  });
+  fileInput.addEventListener('change', e => { if (e.target.files[0]) loadFile(e.target.files[0]); });
+
+  generateBtn.addEventListener('click', () => runPipeline());
+  saveBtn.addEventListener('click', () => exportImages());
+
+  function loadFile(file){
+    if (!/^image\//.test(file.type)) { imageStatus.textContent = 'Please choose an image file.'; return; }
+    const reader = new FileReader();
+    reader.onload = ev => {
+      const img = new Image();
+      img.onload = () => {
+        sourceImage = img;
+        srcW = img.naturalWidth; srcH = img.naturalHeight;
+        imageStatus.textContent = `Loaded "${file.name}" &mdash; ${srcW}×${srcH}px`;
+        imageStatus.innerHTML = imageStatus.textContent;
+        generateBtn.disabled = false;
+        runPipeline(); // auto-run once with current defaults
+      };
+      img.onerror = () => { imageStatus.textContent = 'Could not load that image.'; };
+      img.src = ev.target.result;
+    };
+    reader.readAsDataURL(file);
+  }
+
+  function showOverlay(msg){ overlayText.textContent = msg; overlay.classList.add('show'); }
+  function hideOverlay(){ overlay.classList.remove('show'); }
+
+  // =====================================================================
+  // Color space helpers: sRGB <-> CIELAB (D65 reference white)
+  // =====================================================================
+  function srgbToLinear(c){ c/=255; return c<=0.04045 ? c/12.92 : Math.pow((c+0.055)/1.055, 2.4); }
+  function linearToSrgb(c){ return c<=0.0031308 ? c*12.92*255 : (1.055*Math.pow(c,1/2.4)-0.055)*255; }
+
+  function rgb2lab(r,g,b){
+    const R=srgbToLinear(r), G=srgbToLinear(g), B=srgbToLinear(b);
+    let X = R*0.4124564+G*0.3575761+B*0.1804375;
+    let Y = R*0.2126729+G*0.7151522+B*0.0721750;
+    let Z = R*0.0193339+G*0.1191920+B*0.9503041;
+    const Xn=0.95047, Yn=1.0, Zn=1.08883;
+    X/=Xn; Y/=Yn; Z/=Zn;
+    const f = t => t>0.008856 ? Math.pow(t,1/3) : (7.787*t + 16/116);
+    const fx=f(X), fy=f(Y), fz=f(Z);
+    return [116*fy-16, 500*(fx-fy), 200*(fy-fz)];
+  }
+  function lab2rgb(L,a,b){
+    const Xn=0.95047, Yn=1.0, Zn=1.08883;
+    const fy=(L+16)/116, fx=fy+a/500, fz=fy-b/200;
+    const inv = t => { const t3=t*t*t; return t3>0.008856 ? t3 : (t-16/116)/7.787; };
+    const X=Xn*inv(fx), Y=Yn*inv(fy), Z=Zn*inv(fz);
+    let R =  X* 3.2404542 + Y*-1.5371385 + Z*-0.4985314;
+    let G =  X*-0.9692660 + Y* 1.8760108 + Z* 0.0415560;
+    let B =  X* 0.0556434 + Y*-0.2040259 + Z* 1.0572252;
+    R=linearToSrgb(R); G=linearToSrgb(G); B=linearToSrgb(B);
+    const clamp = v => Math.max(0, Math.min(255, Math.round(v)));
+    return [clamp(R), clamp(G), clamp(B)];
+  }
+
+  // =====================================================================
+  // Box blur (separable, integer radius) applied in-place-ish on RGBA data
+  // =====================================================================
+  function boxBlur(data, w, h, radius, passes){
+    if (radius <= 0) return data;
+    let src = data;
+    for (let p=0; p<passes; p++){
+      src = boxBlurPass(src, w, h, radius, true);
+      src = boxBlurPass(src, w, h, radius, false);
+    }
+    return src;
+  }
+  function boxBlurPass(data, w, h, radius, horizontal){
+    const out = new Uint8ClampedArray(data.length);
+    const win = radius*2+1;
+    if (horizontal){
+      for (let y=0; y<h; y++){
+        const rowStart = y*w*4;
+        for (let c=0; c<3; c++){
+          let sum=0;
+          for (let x=-radius; x<=radius; x++){
+            const xx = Math.min(w-1, Math.max(0, x));
+            sum += data[rowStart + xx*4 + c];
+          }
+          for (let x=0; x<w; x++){
+            out[rowStart + x*4 + c] = sum/win;
+            const xAdd = Math.min(w-1, x+radius+1);
+            const xSub = Math.max(0, x-radius);
+            sum += data[rowStart + xAdd*4 + c] - data[rowStart + xSub*4 + c];
+          }
+        }
+        // preserve alpha
+        for (let x=0; x<w; x++) out[rowStart+x*4+3] = data[rowStart+x*4+3];
+      }
+    } else {
+      for (let x=0; x<w; x++){
+        for (let c=0; c<3; c++){
+          let sum=0;
+          for (let y=-radius; y<=radius; y++){
+            const yy = Math.min(h-1, Math.max(0,y));
+            sum += data[(yy*w+x)*4 + c];
+          }
+          for (let y=0; y<h; y++){
+            out[(y*w+x)*4+c] = sum/win;
+            const yAdd = Math.min(h-1, y+radius+1);
+            const ySub = Math.max(0, y-radius);
+            sum += data[(yAdd*w+x)*4+c] - data[(ySub*w+x)*4+c];
+          }
+        }
+        for (let y=0; y<h; y++) out[(y*w+x)*4+3] = data[(y*w+x)*4+3];
+      }
+    }
+    return out;
+  }
+
+  // =====================================================================
+  // K-means++ clustering in LAB space
+  // =====================================================================
+  function kmeansPlusPlusInit(samples, n, k, rng){
+    const centroids = [];
+    const firstIdx = Math.floor(rng()*n);
+    centroids.push([samples[firstIdx*3], samples[firstIdx*3+1], samples[firstIdx*3+2]]);
+    const distSq = new Float64Array(n).fill(Infinity);
+    for (let c=1; c<k; c++){
+      const last = centroids[centroids.length-1];
+      let sum = 0;
+      for (let i=0; i<n; i++){
+        const dl = samples[i*3]-last[0], da = samples[i*3+1]-last[1], db = samples[i*3+2]-last[2];
+        const d = dl*dl+da*da+db*db;
+        if (d < distSq[i]) distSq[i] = d;
+        sum += distSq[i];
+      }
+      let r = rng()*sum, acc=0, chosen=n-1;
+      for (let i=0; i<n; i++){ acc += distSq[i]; if (acc >= r){ chosen = i; break; } }
+      centroids.push([samples[chosen*3], samples[chosen*3+1], samples[chosen*3+2]]);
+    }
+    return centroids;
+  }
+
+  function runKMeans(samples, n, k, iterations){
+    // deterministic-ish PRNG so results are stable across runs of same image
+    let seed = 42;
+    const rng = () => { seed = (seed*1103515245+12345) & 0x7fffffff; return seed/0x7fffffff; };
+    let centroids = kmeansPlusPlusInit(samples, n, k, rng);
+    const assign = new Int32Array(n);
+    for (let it=0; it<iterations; it++){
+      // assign
+      for (let i=0; i<n; i++){
+        const L=samples[i*3], A=samples[i*3+1], B=samples[i*3+2];
+        let best=0, bestD=Infinity;
+        for (let c=0; c<k; c++){
+          const cc=centroids[c];
+          const dl=L-cc[0], da=A-cc[1], db=B-cc[2];
+          const d=dl*dl+da*da+db*db;
+          if (d<bestD){ bestD=d; best=c; }
+        }
+        assign[i]=best;
+      }
+      // update
+      const sums = Array.from({length:k}, ()=>[0,0,0,0]);
+      for (let i=0; i<n; i++){
+        const c = assign[i], s = sums[c];
+        s[0]+=samples[i*3]; s[1]+=samples[i*3+1]; s[2]+=samples[i*3+2]; s[3]++;
+      }
+      for (let c=0; c<k; c++){
+        if (sums[c][3]>0){
+          centroids[c] = [sums[c][0]/sums[c][3], sums[c][1]/sums[c][3], sums[c][2]/sums[c][3]];
+        }
+      }
+    }
+    return centroids;
+  }
+
+  // =====================================================================
+  // Main pipeline
+  // =====================================================================
+  function runPipeline(){
+    if (!sourceImage) return;
+    generateBtn.disabled = true; saveBtn.disabled = true;
+    showOverlay('Processing image… this can take a while for large photos.');
+    genStatus.textContent = '';
+    setTimeout(() => {
+      try{
+        process();
+        genStatus.textContent = 'Done.';
+        saveBtn.disabled = false;
+      } catch(err){
+        console.error(err);
+        genStatus.textContent = 'Error: ' + err.message;
+      } finally {
+        generateBtn.disabled = false;
+        hideOverlay();
+      }
+    }, 30);
+  }
+
+  function process(){
+    const numColors = +colorCountEl.value;
+    const smoothing = +smoothingEl.value; // 0-100
+    const printable = coloringMode.checked;
+
+    const w = srcW, h = srcH;
+
+    // --- draw original at native resolution ---
+    const srcCanvas = document.createElement('canvas');
+    srcCanvas.width = w; srcCanvas.height = h;
+    const sctx = srcCanvas.getContext('2d');
+    sctx.drawImage(sourceImage, 0, 0, w, h);
+    let imgData = sctx.getImageData(0, 0, w, h);
+    let data = imgData.data;
+
+    // --- 1. pre-quantization blur (reduces noise before clustering) ---
+    const blurRadius = Math.round((smoothing/100) * 3); // 0..3
+    if (blurRadius > 0){
+      data = boxBlur(data, w, h, blurRadius, 2);
+    }
+
+    // --- 2. sample pixels & convert to LAB for clustering ---
+    const totalPx = w*h;
+    const maxSamples = 30000;
+    const stride = Math.max(1, Math.floor(totalPx / maxSamples));
+    const sampleCount = Math.floor(totalPx / stride);
+    const samplesLab = new Float32Array(sampleCount*3);
+    {
+      let s=0;
+      for (let i=0, px=0; px<totalPx && s<sampleCount; px+=stride, i++){
+        const o = px*4;
+        const lab = rgb2lab(data[o], data[o+1], data[o+2]);
+        samplesLab[s*3]=lab[0]; samplesLab[s*3+1]=lab[1]; samplesLab[s*3+2]=lab[2];
+        s++;
+      }
+    }
+
+    // --- 3. k-means++ clustering to get a perceptually distinct palette ---
+    const k = Math.min(numColors, sampleCount);
+    const centroidsLab = runKMeans(samplesLab, sampleCount, k, 10);
+    const paletteRGB = centroidsLab.map(c => lab2rgb(c[0], c[1], c[2]));
+
+    // --- 4. assign every pixel to nearest palette color (full resolution) ---
+    const labelMap = new Uint8Array(totalPx); // supports up to 255 colors, plenty for k<=30
+    {
+      // precompute per-pixel LAB on the fly to save memory for huge images
+      for (let px=0; px<totalPx; px++){
+        const o = px*4;
+        const lab = rgb2lab(data[o], data[o+1], data[o+2]);
+        let best=0, bestD=Infinity;
+        for (let c=0; c<k; c++){
+          const cc = centroidsLab[c];
+          const dl=lab[0]-cc[0], da=lab[1]-cc[1], db=lab[2]-cc[2];
+          const d=dl*dl+da*da+db*db;
+          if (d<bestD){ bestD=d; best=c; }
+        }
+        labelMap[px]=best;
+      }
+    }
+
+    // --- 5. post-quantization mode-filter smoothing on the label map ---
+    const smoothIterations = smoothing<20 ? 0 : smoothing<45 ? 1 : smoothing<75 ? 2 : 3;
+    let curLabels = labelMap;
+    for (let it=0; it<smoothIterations; it++){
+      curLabels = modeFilter(curLabels, w, h, k);
+    }
+
+    // --- 6. connected components + merge tiny regions into best neighbor ---
+    const minArea = Math.max(2, Math.min(4000, Math.round((smoothing/100) * 0.0012 * totalPx)));
+    const merged = mergeSmallRegions(curLabels, w, h, k, minArea);
+    // merged: {finalLabelMap (Uint8Array, palette idx per pixel), regionId (Int32Array), regions:[{id,area,cx,cy,colorIdx}]}
+
+    lastPalette = paletteRGB.map(([r,g,b]) => ({r,g,b,hex: rgbToHex(r,g,b)}));
+
+    renderOutputs(merged, w, h, printable);
+    renderPaletteLegend(lastPalette);
+  }
+
+  // Mode filter: 3x3 neighborhood majority vote, ping-pong buffer.
+  function modeFilter(labels, w, h, k){
+    const out = new Uint8Array(labels.length);
+    const counts = new Int32Array(k);
+    for (let y=0; y<h; y++){
+      for (let x=0; x<w; x++){
+        counts.fill(0);
+        for (let dy=-1; dy<=1; dy++){
+          const yy=y+dy; if (yy<0||yy>=h) continue;
+          for (let dx=-1; dx<=1; dx++){
+            const xx=x+dx; if (xx<0||xx>=w) continue;
+            counts[labels[yy*w+xx]]++;
+          }
+        }
+        let best=0, bestC=-1;
+        for (let c=0; c<k; c++){ if (counts[c]>bestC){ bestC=counts[c]; best=c; } }
+        out[y*w+x]=best;
+      }
+    }
+    return out;
+  }
+
+  // Connected-component labeling (4-connectivity) + adjacency-weighted
+  // union-find merge of tiny regions into their most strongly bordering
+  // neighbor. Returns finalized per-pixel palette label + region metadata
+  // for outline drawing and number placement.
+  function mergeSmallRegions(labels, w, h, k, minArea){
+    const total = w*h;
+    const compId = new Int32Array(total).fill(-1);
+    const compColor = []; // palette color index per component id
+    const compArea = [];
+    let nextComp = 0;
+    const stackX = new Int32Array(total);
+    const stackY = new Int32Array(total);
+
+    for (let y=0; y<h; y++){
+      for (let x=0; x<w; x++){
+        const idx = y*w+x;
+        if (compId[idx] !== -1) continue;
+        const lbl = labels[idx];
+        let sp = 0;
+        stackX[sp]=x; stackY[sp]=y; sp++;
+        compId[idx] = nextComp;
+        let area = 0;
+        while (sp>0){
+          sp--;
+          const cx=stackX[sp], cy=stackY[sp];
+          area++;
+          const neighbors = [[cx+1,cy],[cx-1,cy],[cx,cy+1],[cx,cy-1]];
+          for (const [nx,ny] of neighbors){
+            if (nx<0||nx>=w||ny<0||ny>=h) continue;
+            const nidx = ny*w+nx;
+            if (compId[nidx] === -1 && labels[nidx] === lbl){
+              compId[nidx] = nextComp;
+              stackX[sp]=nx; stackY[sp]=ny; sp++;
+            }
+          }
+        }
+        compColor.push(lbl);
+        compArea.push(area);
+        nextComp++;
+      }
+    }
+
+    // adjacency counts between components (scan right & down neighbors)
+    const adjacency = new Map(); // key "a,b" (a<b) -> count
+    function addAdj(a,b){
+      if (a===b) return;
+      const key = a<b ? a+','+b : b+','+a;
+      adjacency.set(key, (adjacency.get(key)||0)+1);
+    }
+    for (let y=0; y<h; y++){
+      for (let x=0; x<w; x++){
+        const idx=y*w+x, c=compId[idx];
+        if (x+1<w){ const r=compId[idx+1]; if (r!==c) addAdj(c,r); }
+        if (y+1<h){ const d=compId[idx+w]; if (d!==c) addAdj(c,d); }
+      }
+    }
+    // build per-component neighbor list sorted by shared-border strength
+    const neighborsOf = Array.from({length:nextComp}, () => []);
+    for (const [key,count] of adjacency){
+      const [a,b] = key.split(',').map(Number);
+      neighborsOf[a].push([b,count]);
+      neighborsOf[b].push([a,count]);
+    }
+
+    // union-find
+    const parent = new Int32Array(nextComp);
+    for (let i=0;i<nextComp;i++) parent[i]=i;
+    function find(i){ while (parent[i]!==i){ parent[i]=parent[parent[i]]; i=parent[i]; } return i; }
+
+    // process components smallest-first; merge into strongest neighbor
+    const order = Array.from({length:nextComp}, (_,i)=>i).sort((a,b)=>compArea[a]-compArea[b]);
+    for (const comp of order){
+      if (compArea[comp] >= minArea) continue;
+      const root = find(comp);
+      if (root !== comp) continue; // already absorbed
+      let best=-1, bestCount=-1;
+      for (const [nb,count] of neighborsOf[comp]){
+        const nbRoot = find(nb);
+        if (nbRoot === root) continue;
+        if (count > bestCount){ bestCount=count; best=nbRoot; }
+      }
+      if (best !== -1){
+        parent[root] = best; // absorb small region into neighbor; neighbor's color wins
+      }
+    }
+
+    // final per-pixel palette label + region id (DSU root)
+    const finalPixelLabel = new Uint8Array(total);
+    const finalRegionId = new Int32Array(total);
+    for (let i=0;i<total;i++){
+      const root = find(compId[i]);
+      finalRegionId[i] = root;
+      finalPixelLabel[i] = compColor[root];
+    }
+
+    // aggregate final regions (centroid + area) for number placement
+    const regionAgg = new Map(); // root -> {area,sumX,sumY,colorIdx}
+    for (let y=0; y<h; y++){
+      for (let x=0; x<w; x++){
+        const idx=y*w+x, root=finalRegionId[idx];
+        let agg = regionAgg.get(root);
+        if (!agg){ agg = {area:0,sumX:0,sumY:0,colorIdx:finalPixelLabel[idx]}; regionAgg.set(root,agg); }
+        agg.area++; agg.sumX+=x; agg.sumY+=y;
+      }
+    }
+    const regions = [];
+    for (const [root,agg] of regionAgg){
+      regions.push({ id:root, area:agg.area, cx:agg.sumX/agg.area, cy:agg.sumY/agg.area, colorIdx:agg.colorIdx });
+    }
+
+    return { finalPixelLabel, finalRegionId, regions };
+  }
+
+  function rgbToHex(r,g,b){
+    return '#'+[r,g,b].map(v=>v.toString(16).padStart(2,'0')).join('').toUpperCase();
+  }
+
+  // =====================================================================
+  // Rendering
+  // =====================================================================
+  function renderOutputs(merged, w, h, printable){
+    const { finalPixelLabel, finalRegionId, regions } = merged;
+
+    // ---- Color preview (posterized flat fill) ----
+    previewCanvas.width = w; previewCanvas.height = h;
+    const pctx = previewCanvas.getContext('2d');
+    const previewData = pctx.createImageData(w,h);
+    for (let i=0;i<w*h;i++){
+      const c = lastPalette[finalPixelLabel[i]];
+      const o=i*4;
+      previewData.data[o]=c.r; previewData.data[o+1]=c.g; previewData.data[o+2]=c.b; previewData.data[o+3]=255;
+    }
+    pctx.putImageData(previewData,0,0);
+
+    // ---- Paint-by-numbers output (outlines + numbers) ----
+    outlineCanvas.width = w; outlineCanvas.height = h;
+    const octx = outlineCanvas.getContext('2d');
+    if (printable){
+      octx.fillStyle = '#ffffff';
+      octx.fillRect(0,0,w,h);
+    } else {
+      octx.putImageData(previewData,0,0);
+    }
+
+    // draw boundaries where adjacent pixels belong to different final regions
+    const boundaryData = octx.getImageData(0,0,w,h);
+    const bd = boundaryData.data;
+    for (let y=0;y<h;y++){
+      for (let x=0;x<w;x++){
+        const idx=y*w+x, r=finalRegionId[idx];
+        let isBoundary=false;
+        if (x+1<w && finalRegionId[idx+1]!==r) isBoundary=true;
+        if (!isBoundary && y+1<h && finalRegionId[idx+w]!==r) isBoundary=true;
+        if (isBoundary){
+          const o=idx*4;
+          bd[o]=0; bd[o+1]=0; bd[o+2]=0; bd[o+3]=255;
+        }
+      }
+    }
+    octx.putImageData(boundaryData,0,0);
+
+    // number labels at region centroids, sized by region area
+    octx.textAlign='center'; octx.textBaseline='middle'; octx.fillStyle='#000000';
+    for (const region of regions){
+      if (region.area < 12) continue; // too small to usefully label
+      const fontSize = Math.max(8, Math.min(30, Math.round(Math.sqrt(region.area)*0.55)));
+      octx.font = `bold ${fontSize}px Arial, sans-serif`;
+      octx.fillText(String(region.colorIdx+1), region.cx, region.cy);
+    }
+  }
+
+  function renderPaletteLegend(palette){
+    paletteGrid.innerHTML = '';
+    palette.forEach((c, i) => {
+      const div = document.createElement('div');
+      div.className = 'swatch';
+      const lum = 0.2126*c.r+0.7152*c.g+0.0722*c.b;
+      div.innerHTML = `
+        <div class="chip" style="background:${c.hex}; color:${lum>140?'#000':'#fff'}; text-shadow:none;">${i+1}</div>
+        <div class="info"><div class="hex">${c.hex}</div><div>RGB(${c.r}, ${c.g}, ${c.b})</div></div>`;
+      paletteGrid.appendChild(div);
+    });
+  }
+
+  // =====================================================================
+  // Export: two PNG downloads (paint-by-numbers image + palette legend)
+  // =====================================================================
+  function exportImages(){
+    if (!lastPalette.length) return;
+    downloadCanvasPNG(outlineCanvas, 'paint-by-numbers.png');
+    setTimeout(() => {
+      buildPaletteExportCanvas(lastPalette);
+      downloadCanvasPNG(paletteExportCanvas, 'color-palette.png');
+      setTimeout(() => {
+        downloadCanvasPNG(previewCanvas, 'color-preview.png');
+      }, 150);
+    }, 150);
+  }
+
+  function downloadCanvasPNG(canvas, filename){
+    canvas.toBlob(blob => {
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(()=>URL.revokeObjectURL(url), 2000);
+    }, 'image/png');
+  }
+
+  function buildPaletteExportCanvas(palette){
+    const cols = 4;
+    const rows = Math.ceil(palette.length/cols);
+    const cellW = 280, cellH = 90, pad = 20, headerH = 60;
+    const w = cols*cellW + pad*2;
+    const h = rows*cellH + pad*2 + headerH;
+    paletteExportCanvas.width = w; paletteExportCanvas.height = h;
+    const ctx = paletteExportCanvas.getContext('2d');
+    ctx.fillStyle = '#ffffff'; ctx.fillRect(0,0,w,h);
+    ctx.fillStyle = '#2b2a28';
+    ctx.font = 'bold 28px Arial, sans-serif';
+    ctx.textBaseline = 'top';
+    ctx.fillText('Paint-by-Numbers Color Palette', pad, pad);
+
+    palette.forEach((c, i) => {
+      const col = i % cols, row = Math.floor(i/cols);
+      const x = pad + col*cellW, y = headerH + pad + row*cellH;
+      // swatch chip
+      ctx.fillStyle = c.hex;
+      ctx.strokeStyle = 'rgba(0,0,0,0.25)';
+      ctx.lineWidth = 1;
+      ctx.fillRect(x, y, 60, 60);
+      ctx.strokeRect(x, y, 60, 60);
+      const lum = 0.2126*c.r+0.7152*c.g+0.0722*c.b;
+      ctx.fillStyle = lum>140 ? '#000000' : '#ffffff';
+      ctx.font = 'bold 22px Arial, sans-serif';
+      ctx.textAlign='center'; ctx.textBaseline='middle';
+      ctx.fillText(String(i+1), x+30, y+30);
+      // text info
+      ctx.textAlign='left'; ctx.textBaseline='top';
+      ctx.fillStyle = '#2b2a28';
+      ctx.font = 'bold 15px Arial, sans-serif';
+      ctx.fillText(c.hex, x+72, y+8);
+      ctx.font = '13px Arial, sans-serif';
+      ctx.fillStyle = '#5a544c';
+      ctx.fillText(`RGB(${c.r}, ${c.g}, ${c.b})`, x+72, y+30);
+      ctx.fillText(`Color #${i+1}`, x+72, y+48);
+    });
+  }
+
+})();
+</script>
+
+</body>
+</html>
