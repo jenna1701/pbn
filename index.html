@@ -112,8 +112,12 @@
       <div class="smoothing-desc">Blurs noise before quantizing, smooths jagged region borders after, and merges away tiny stray regions. Higher = simpler, cleaner shapes.</div>
     </div>
     <div class="toggle-row">
-      <label for="coloringMode">Printable coloring-page style (white bg + outlines)</label>
+      <label for="coloringMode">Printable coloring-page style</label>
       <input type="checkbox" id="coloringMode" checked style="width:18px;height:18px;flex:0 0 18px;">
+    </div>
+    <div class="toggle-row">
+      <label for="showNumbers">Show numbers</label>
+      <input type="checkbox" id="showNumbers" checked style="width:18px;height:18px;flex:0 0 18px;">
     </div>
 
     <button class="primary" id="generateBtn" disabled>Generate Paint-by-Numbers</button>
@@ -175,6 +179,7 @@
   const smoothingEl   = document.getElementById('smoothing');
   const smoothingVal  = document.getElementById('smoothingVal');
   const coloringMode  = document.getElementById('coloringMode');
+  const showNumbers   = document.getElementById('showNumbers');
   const generateBtn   = document.getElementById('generateBtn');
   const saveBtn       = document.getElementById('saveBtn');
   const genStatus     = document.getElementById('genStatus');
@@ -474,7 +479,7 @@
 
     lastPalette = paletteRGB.map(([r,g,b]) => ({r,g,b,hex: rgbToHex(r,g,b)}));
 
-    renderOutputs(merged, w, h, printable);
+    renderOutputs(merged, w, h, printable, showNumbers.checked);
     renderPaletteLegend(lastPalette);
   }
 
@@ -620,7 +625,7 @@
   // =====================================================================
   // Rendering
   // =====================================================================
-  function renderOutputs(merged, w, h, printable){
+  function renderOutputs(merged, w, h, printable, drawNumbers){
     const { finalPixelLabel, finalRegionId, regions } = merged;
 
     // ---- Color preview (posterized flat fill) ----
@@ -660,6 +665,8 @@
       }
     }
     octx.putImageData(boundaryData,0,0);
+
+    if (!drawNumbers) return; // "Show numbers" unchecked: outlines only, skip labeling entirely
 
     // ---- Number label placement ----
     // Instead of the raw pixel centroid (which for thin/curved/branching
