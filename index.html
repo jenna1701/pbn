@@ -56,7 +56,7 @@
   button:disabled{opacity:.5; cursor:not-allowed;}
   .status{font-size:12px; color:var(--muted); min-height:16px; margin-top:4px;}
   .outputs{flex:1; min-width:320px; display:flex; flex-direction:column; gap:20px;}
-  .canvas-wrap{overflow:auto; max-height:640px; border:1px solid var(--border); border-radius:8px; background:#fafafa; padding:10px;}
+  .canvas-wrap{overflow:auto; max-height:960px; border:1px solid var(--border); border-radius:8px; background:#fafafa; padding:10px;}
   .canvas-wrap canvas{display:block; max-width:100%; image-rendering:pixelated;}
   .canvas-wrap canvas.fitwidth{width:100%; height:auto; image-rendering:auto;}
   .section-title{font-size:14px; font-weight:700; margin:0 0 8px;}
@@ -160,12 +160,12 @@
       <div class="canvas-wrap"><canvas id="previewCanvas" class="fitwidth"></canvas></div>
     </div>
     <div class="panel">
-      <p class="section-title">Paint-by-Numbers Output</p>
-      <div class="canvas-wrap"><canvas id="outlineCanvas" class="fitwidth"></canvas></div>
-    </div>
-    <div class="panel">
       <p class="section-title">Color Palette / Legend</p>
       <div class="palette-grid" id="paletteGrid"></div>
+    </div>
+    <div class="panel">
+      <p class="section-title">Paint-by-Numbers Output</p>
+      <div class="canvas-wrap"><canvas id="outlineCanvas" class="fitwidth"></canvas></div>
     </div>
   </div>
 
