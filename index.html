@@ -655,19 +655,88 @@
         if (!isBoundary && y+1<h && finalRegionId[idx+w]!==r) isBoundary=true;
         if (isBoundary){
           const o=idx*4;
-          bd[o]=0; bd[o+1]=0; bd[o+2]=0; bd[o+3]=255;
+          bd[o]=153; bd[o+1]=153; bd[o+2]=153; bd[o+3]=255; // light gray outline
         }
       }
     }
     octx.putImageData(boundaryData,0,0);
 
-    // number labels at region centroids, sized by region area
-    octx.textAlign='center'; octx.textBaseline='middle'; octx.fillStyle='#000000';
-    for (const region of regions){
+    // ---- Number label placement ----
+    // Instead of the raw pixel centroid (which for thin/curved/branching
+    // shapes can easily land ON or right next to an outline), find each
+    // region's "pole of inaccessibility" -- the interior point that is
+    // farthest from any edge/outline -- via a multi-source BFS distance
+    // transform seeded from every outline pixel (and the image border).
+    // Regions that are too thin to ever clear the outline by a sensible
+    // margin are simply left unlabeled rather than crowding a number in.
+    const total = w*h;
+    const isEdge = new Uint8Array(total);
+    for (let y=0;y<h;y++){
+      for (let x=0;x<w;x++){
+        const idx=y*w+x, r=finalRegionId[idx];
+        if (x+1<w && finalRegionId[idx+1]!==r){ isEdge[idx]=1; isEdge[idx+1]=1; }
+        if (y+1<h && finalRegionId[idx+w]!==r){ isEdge[idx]=1; isEdge[idx+w]=1; }
+        if (x===0||x===w-1||y===0||y===h-1) isEdge[idx]=1;
+      }
+    }
+    const dist = new Int32Array(total).fill(-1);
+    const bfsQueue = new Int32Array(total);
+    let qHead=0, qTail=0;
+    for (let i=0;i<total;i++){ if (isEdge[i]){ dist[i]=0; bfsQueue[qTail++]=i; } }
+    while (qHead < qTail){
+      const i = bfsQueue[qHead++];
+      const x = i % w, y = (i - x) / w;
+      const nd = dist[i] + 1;
+      if (x+1<w){ const j=i+1; if (dist[j]===-1){ dist[j]=nd; bfsQueue[qTail++]=j; } }
+      if (x-1>=0){ const j=i-1; if (dist[j]===-1){ dist[j]=nd; bfsQueue[qTail++]=j; } }
+      if (y+1<h){ const j=i+w; if (dist[j]===-1){ dist[j]=nd; bfsQueue[qTail++]=j; } }
+      if (y-1>=0){ const j=i-w; if (dist[j]===-1){ dist[j]=nd; bfsQueue[qTail++]=j; } }
+    }
+
+    // For each region, find the pixel with maximum distance-from-edge.
+    const anchorByRoot = new Map(); // rootId -> {x,y,dist}
+    for (let i=0;i<total;i++){
+      const root = finalRegionId[i], d = dist[i];
+      const cur = anchorByRoot.get(root);
+      if (!cur || d > cur.dist) anchorByRoot.set(root, {x: i%w, y: Math.floor(i/w), dist: d});
+    }
+
+    const diag = Math.sqrt(w*w + h*h);
+    const minFont = Math.max(6, diag*0.0035);
+    const maxFont = diag*0.014;
+    const minInteriorDepth = Math.max(2, diag*0.0018); // regions thinner than this go unlabeled
+    const minSeparation = minFont * 1.4; // don't let two labels land closer than this
+
+    octx.textAlign='center'; octx.textBaseline='middle';
+    octx.fillStyle = 'rgb(153,153,153)'; // light gray, matches outline color
+
+    // Label larger regions first so, if two candidate labels would collide,
+    // the smaller/thinner one (more likely a stray sliver) is the one skipped.
+    const placed = []; // {x,y,fontSize}
+    const sortedRegions = regions.slice().sort((a,b)=>b.area-a.area);
+    for (const region of sortedRegions){
       if (region.area < 12) continue; // too small to usefully label
-      const fontSize = Math.max(8, Math.min(30, Math.round(Math.sqrt(region.area)*0.55)));
-      octx.font = `bold ${fontSize}px Arial, sans-serif`;
-      octx.fillText(String(region.colorIdx+1), region.cx, region.cy);
+      const anchor = anchorByRoot.get(region.id);
+      if (!anchor || anchor.dist < minInteriorDepth) continue; // no safe interior spot
+
+      let fontSize = Math.sqrt(region.area) * 0.30;
+      fontSize = Math.max(minFont, Math.min(maxFont, fontSize));
+      // never let the glyph size exceed the region's own interior clearance
+      fontSize = Math.min(fontSize, anchor.dist * 1.8);
+      if (fontSize < minFont*0.6) continue; // would be unreadably small
+
+      // avoid stacking a second number too close to one already placed
+      let tooClose = false;
+      for (const p of placed){
+        const dx=p.x-anchor.x, dy=p.y-anchor.y;
+        if (Math.sqrt(dx*dx+dy*dy) < Math.max(minSeparation, (p.fontSize+fontSize)*0.55)){ tooClose=true; break; }
+      }
+      if (tooClose) continue;
+
+      placed.push({x:anchor.x, y:anchor.y, fontSize});
+      // thin, non-bold font weight (300 = "Light")
+      octx.font = `300 ${fontSize}px "Helvetica Neue", Arial, sans-serif`;
+      octx.fillText(String(region.colorIdx+1), anchor.x, anchor.y);
     }
   }
 
