@@ -820,11 +820,16 @@
   }
 
   // =====================================================================
-  // Export: two PNG downloads (paint-by-numbers image + palette legend)
+  // Export: three PNG downloads (paint-by-numbers image, palette legend,
+  // and color preview). Only the paint-by-numbers PNG has its DPI metadata
+  // set to 150 (via the PNG pHYs chunk) -- the other two files are saved
+  // exactly as the canvas produces them, with no DPI tag changed.
   // =====================================================================
+  const PBN_EXPORT_DPI = 150;
+
   function exportImages(){
     if (!lastPalette.length) return;
-    downloadCanvasPNG(outlineCanvas, 'paint-by-numbers.png');
+    downloadCanvasPNG(outlineCanvas, 'paint-by-numbers.png', PBN_EXPORT_DPI);
     setTimeout(() => {
       buildPaletteExportCanvas(lastPalette);
       downloadCanvasPNG(paletteExportCanvas, 'color-palette.png');
@@ -834,16 +839,75 @@
     }, 150);
   }
 
-  function downloadCanvasPNG(canvas, filename){
+  // dpi is optional; when provided, the PNG's pHYs chunk is set so image
+  // viewers/printers report that DPI. This does not resample or resize the
+  // pixels themselves -- it only tags how densely they should be printed.
+  function downloadCanvasPNG(canvas, filename, dpi){
     canvas.toBlob(blob => {
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url; a.download = filename;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      setTimeout(()=>URL.revokeObjectURL(url), 2000);
+      const finish = finalBlob => {
+        const url = URL.createObjectURL(finalBlob);
+        const a = document.createElement('a');
+        a.href = url; a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        setTimeout(()=>URL.revokeObjectURL(url), 2000);
+      };
+      if (dpi){
+        setPngDpi(blob, dpi).then(finish).catch(err => { console.error(err); finish(blob); });
+      } else {
+        finish(blob);
+      }
     }, 'image/png');
+  }
+
+  // ---- PNG pHYs-chunk helper: embeds a physical pixel-density tag ----
+  function setPngDpi(blob, dpi){
+    return blob.arrayBuffer().then(buf => {
+      const bytes = new Uint8Array(buf);
+      const readU32BE = (arr, off) => (arr[off]<<24 | arr[off+1]<<16 | arr[off+2]<<8 | arr[off+3]) >>> 0;
+      const writeU32BE = (arr, off, val) => {
+        arr[off]=(val>>>24)&0xFF; arr[off+1]=(val>>>16)&0xFF; arr[off+2]=(val>>>8)&0xFF; arr[off+3]=val&0xFF;
+      };
+      // PNG signature (8 bytes) is always followed immediately by IHDR:
+      // length(4) + "IHDR"(4) + data(13) + crc(4) = 25 bytes.
+      const ihdrLen = readU32BE(bytes, 8);
+      const insertAt = 8 + 4 + 4 + ihdrLen + 4;
+
+      const ppm = Math.round(dpi / 0.0254); // pixels-per-inch -> pixels-per-meter
+      const type = new Uint8Array([0x70,0x48,0x59,0x73]); // "pHYs"
+      const data = new Uint8Array(9);
+      writeU32BE(data, 0, ppm);
+      writeU32BE(data, 4, ppm);
+      data[8] = 1; // unit specifier: 1 = meters
+
+      const crcInput = new Uint8Array(type.length + data.length);
+      crcInput.set(type, 0); crcInput.set(data, type.length);
+      const crc = crc32(crcInput);
+
+      const chunk = new Uint8Array(4 + 4 + 9 + 4);
+      writeU32BE(chunk, 0, 9);
+      chunk.set(type, 4);
+      chunk.set(data, 8);
+      writeU32BE(chunk, 17, crc);
+
+      const out = new Uint8Array(bytes.length + chunk.length);
+      out.set(bytes.subarray(0, insertAt), 0);
+      out.set(chunk, insertAt);
+      out.set(bytes.subarray(insertAt), insertAt + chunk.length);
+      return new Blob([out], {type:'image/png'});
+    });
+  }
+
+  function crc32(bytes){
+    let crc = 0xFFFFFFFF;
+    for (let i=0; i<bytes.length; i++){
+      crc ^= bytes[i];
+      for (let j=0; j<8; j++){
+        crc = (crc & 1) ? ((crc >>> 1) ^ 0xEDB88320) : (crc >>> 1);
+      }
+    }
+    return (crc ^ 0xFFFFFFFF) >>> 0;
   }
 
   function buildPaletteExportCanvas(palette){
