@@ -148,6 +148,11 @@
       <label for="showNumbers">Show numbers</label>
       <input type="checkbox" id="showNumbers" checked style="width:18px;height:18px;flex:0 0 18px;">
     </div>
+    <div class="field">
+      <label for="randomSeed">Random Seed</label>
+      <input type="number" id="randomSeed" value="42" step="1" style="width:100%;box-sizing:border-box;">
+      <div class="smoothing-desc">Controls the starting point for color clustering. Same seed + same settings = same result; try a different number if you'd like a different palette pick.</div>
+    </div>
 
     <button class="primary" id="generateBtn" disabled>Generate Paint-by-Numbers</button>
     <button class="secondary" id="saveBtn" disabled>Save Images (3 files)</button>
@@ -205,6 +210,7 @@
   const imageStatus   = document.getElementById('imageStatus');
   const colorCountEl  = document.getElementById('colorCount');
   const colorCountVal = document.getElementById('colorCountVal');
+  const randomSeedEl  = document.getElementById('randomSeed');
   const smoothingEl   = document.getElementById('smoothing');
   const smoothingVal  = document.getElementById('smoothingVal');
   const coloringMode  = document.getElementById('coloringMode');
@@ -386,9 +392,9 @@
     return centroids;
   }
 
-  function runKMeans(samples, n, k, iterations){
-    // deterministic-ish PRNG so results are stable across runs of same image
-    let seed = 42;
+  function runKMeans(samples, n, k, iterations, initialSeed){
+    // deterministic PRNG so results are stable across runs of same image + seed
+    let seed = (initialSeed === undefined || initialSeed === null || isNaN(initialSeed)) ? 42 : (initialSeed|0);
     const rng = () => { seed = (seed*1103515245+12345) & 0x7fffffff; return seed/0x7fffffff; };
     let centroids = kmeansPlusPlusInit(samples, n, k, rng);
     const assign = new Int32Array(n);
@@ -503,7 +509,8 @@
 
     // --- 3. k-means++ clustering to get a perceptually distinct palette ---
     const k = Math.min(numColors, sampleCount);
-    const centroidsLab = runKMeans(samplesLab, sampleCount, k, 10);
+    const seedVal = parseInt(randomSeedEl.value, 10);
+    const centroidsLab = runKMeans(samplesLab, sampleCount, k, 10, seedVal);
     const paletteRGB = centroidsLab.map(c => lab2rgb(c[0], c[1], c[2]));
 
     // Palette numbers (1,2,3...) are assigned using a perceptual "step sort"
