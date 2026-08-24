@@ -15,10 +15,10 @@
     background:var(--bg); color:var(--ink);
   }
   header{
-    padding:20px 28px; background:var(--panel); border-bottom:1px solid var(--border);
+    padding:8px 28px; background:var(--panel); border-bottom:1px solid var(--border);
   }
   header h1{margin:0; font-size:22px; letter-spacing:.3px;}
-  header p{margin:4px 0 0; color:var(--muted); font-size:13px;}
+  header p{margin:2px 0 0; color:var(--muted); font-size:13px;}
   .layout{
     display:flex; gap:20px; padding:20px 28px; align-items:flex-start; flex-wrap:wrap;
   }
@@ -30,7 +30,7 @@
   .controls h2{font-size:14px; text-transform:uppercase; letter-spacing:.06em; color:var(--muted); margin:0 0 12px;}
   .dropzone{
     border:2px dashed var(--border); border-radius:8px; padding:22px 12px; text-align:center;
-    color:var(--muted); font-size:13px; cursor:pointer; transition:.15s; margin-bottom:14px;
+    color:var(--muted); font-size:13px; cursor:pointer; transition:.15s; margin-bottom:4px;
   }
   .dropzone.drag{border-color:var(--accent); background:#fbf1ea; color:var(--accent);}
   .dropzone input{display:none;}
@@ -111,7 +111,6 @@
       <label for="resizeEnabled">Resize &amp; crop to a fixed size</label>
       <input type="checkbox" id="resizeEnabled" style="width:18px;height:18px;flex:0 0 18px;">
     </div>
-    <div class="hint" id="resizeHint" style="margin-top:-8px;">Off by default &mdash; the original image is used at its native resolution with no cropping.</div>
     <div id="resizeFields" style="display:none;">
       <div class="field-row">
         <div class="field" style="flex:1;">
@@ -138,7 +137,7 @@
     <div class="field">
       <label>Edge Smoothing <span class="val" id="smoothingVal">30 (Low)</span></label>
       <input type="range" id="smoothing" min="0" max="100" value="30" step="1">
-      <div class="smoothing-desc">Blurs noise before quantizing, smooths jagged region borders after, and merges away tiny stray regions. Higher = simpler, cleaner shapes.</div>
+      <div class="smoothing-desc">Blurs noise, smooths borders, and merges tiny stray regions. Higher = simpler shapes; less detail.</div>
     </div>
     <div class="toggle-row">
       <label for="coloringMode">Printable coloring-page style</label>
@@ -151,7 +150,7 @@
     <div class="field">
       <label for="randomSeed">Random Seed</label>
       <input type="number" id="randomSeed" value="42" step="1" style="width:100%;box-sizing:border-box;">
-      <div class="smoothing-desc">Controls the starting point for color clustering. Same seed + same settings = same result; try a different number if you'd like a different palette pick.</div>
+      <div class="smoothing-desc">Controls the starting point for color clustering; try a different number if you'd like a different palette pick.</div>
     </div>
 
     <button class="primary" id="generateBtn" disabled>Generate Paint-by-Numbers</button>
