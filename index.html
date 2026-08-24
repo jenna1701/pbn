@@ -44,7 +44,7 @@
     font-size:13px; color:var(--ink); background:#fff;
   }
   .toggle-row{display:flex; align-items:center; justify-content:space-between; font-size:13px; margin-bottom:16px;}
-  .smoothing-desc{font-size:11px; color:var(--muted); margin-top:2px;}
+  .smoothing-desc{font-size:11px; color:var(--muted); margin-top:2px; margin-bottom:12px;}
   button{
     width:100%; padding:10px 12px; border-radius:6px; border:none; font-size:14px;
     font-weight:600; cursor:pointer; margin-bottom:10px; transition:.15s;
@@ -53,6 +53,8 @@
   button.primary:hover{background:#a94b22;}
   button.secondary{background:var(--accent2); color:#fff;}
   button.secondary:hover{background:#2e5548;}
+  button.ghost{background:#efece6; color:var(--ink);}
+  button.ghost:hover{background:#e4e0d7;}
   button:disabled{opacity:.5; cursor:not-allowed;}
   .status{font-size:12px; color:var(--muted); min-height:16px; margin-top:4px;}
   .outputs{flex:1; min-width:320px; display:flex; flex-direction:column; gap:20px;}
@@ -87,13 +89,51 @@
   .overlay p{font-size:14px; color:var(--ink); margin:0;}
   .hint{font-size:11px; color:var(--muted); margin-top:-4px; margin-bottom:14px;}
   footer{text-align:center; font-size:11px; color:var(--muted); padding:20px;}
+
+  /* ---------------------------------------------------------------------
+     Detail-box overlay (user-drawn "preserve extra detail here" regions).
+     Boxes are plain positioned <div>s layered over the source-image
+     canvas using PERCENTAGE left/top/width/height. Because the stage's
+     aspect ratio always matches the underlying image (the canvas keeps
+     its natural width:height ratio via width:100%/height:auto), a
+     percentage position is automatically correct at any display size —
+     no JS resize recalculation is needed to keep boxes visually aligned.
+     See the JS coordinate-mapping comments for how these same boxes are
+     converted to exact full-resolution pixel coordinates for processing.
+     --------------------------------------------------------------------- */
+  #boxStage{position:relative; display:block; width:100%;}
+  #boxOverlay{position:absolute; inset:0; cursor:crosshair;}
+  .detail-box{
+    position:absolute; border:2px solid var(--accent); background:rgba(192,90,44,0.14);
+    box-sizing:border-box; cursor:move;
+  }
+  .detail-box.temp{border-style:dashed; border-color:var(--accent2); background:rgba(61,107,92,0.16); cursor:crosshair;}
+  .detail-box .box-label{
+    position:absolute; top:2px; left:2px; background:var(--accent); color:#fff; font-size:10px;
+    font-weight:700; padding:1px 5px; border-radius:3px; white-space:nowrap; pointer-events:none;
+  }
+  .detail-box .box-delete{
+    position:absolute; top:2px; right:2px; background:#a94b22; color:#fff; font-size:12px;
+    font-weight:700; width:16px; height:16px; border-radius:3px; display:flex; align-items:center;
+    justify-content:center; cursor:pointer; line-height:1; user-select:none;
+  }
+  .detail-box .handle{
+    position:absolute; width:11px; height:11px; background:#fff; border:2px solid var(--accent);
+    border-radius:50%;
+  }
+  .handle-nw{top:-6px; left:-6px; cursor:nwse-resize;}
+  .handle-ne{top:-6px; right:-6px; cursor:nesw-resize;}
+  .handle-sw{bottom:-6px; left:-6px; cursor:nesw-resize;}
+  .handle-se{bottom:-6px; right:-6px; cursor:nwse-resize;}
+  .box-btn-row{display:flex; gap:8px;}
+  .box-btn-row button{flex:1;}
 </style>
 </head>
 <body>
 
 <header>
   <h1>&#127912; Paint-by-Numbers Generator</h1>
-  <p>Upload an image, tune colors &amp; smoothing, and export a printable numbered outline plus its palette legend &mdash; all processed locally in your browser at full resolution.</p>
+  <p>Upload an image, tune colors &amp; smoothing, mark any areas for extra detail, and export a printable numbered outline plus its palette legend &mdash; all processed locally in your browser at full resolution.</p>
 </header>
 
 <div class="layout">
@@ -126,10 +166,22 @@
         <label>Resolution (DPI) <span></span></label>
         <input type="number" id="targetDpi" min="10" step="10" value="150">
       </div>
-      <div class="smoothing-desc">The image is center-cropped to match the target width:height aspect ratio, then scaled to exactly Width×DPI by Height×DPI pixels.</div>
+      <div class="smoothing-desc">The image is center-cropped to match the target width:height aspect ratio, then scaled to exactly Width×DPI by Height×DPI pixels. Do this before marking detail regions below, since changing it resets any boxes you've drawn.</div>
     </div>
 
-    <h2 style="margin-top:18px;">3. Settings</h2>
+    <h2 style="margin-top:18px;">3. Detail Regions</h2>
+    <div class="smoothing-desc">Click-and-drag directly on the image to box any areas that need extra detail.</div>
+    <div class="toggle-row">
+      <label for="preserveDetailToggle">Preserve detail in boxed areas</label>
+      <input type="checkbox" id="preserveDetailToggle" checked style="width:18px;height:18px;flex:0 0 18px;">
+    </div>
+    <div class="box-btn-row">
+      <button class="ghost" id="addBoxBtn" disabled>+ Add Box</button>
+      <button class="ghost" id="clearBoxesBtn" disabled>Clear All</button>
+    </div>
+    <div class="status" id="boxStatus">Upload an image to start marking detail regions.</div>
+
+    <h2 style="margin-top:18px;">4. Settings</h2>
     <div class="field">
       <label>Number of Colors <span class="val" id="colorCountVal">12</span></label>
       <input type="range" id="colorCount" min="5" max="30" value="12" step="1">
@@ -159,6 +211,16 @@
   </div>
 
   <div class="outputs">
+    <div class="panel" id="boxPanel" style="display:none;">
+      <p class="section-title">Mark Detail Regions</p>
+      <div class="hint">Drag a corner dot to resize, drag the box body to move it, click the × to delete it.</div>
+      <div class="canvas-wrap">
+        <div id="boxStage">
+          <canvas id="boxDisplayCanvas" class="fitwidth"></canvas>
+          <div id="boxOverlay"></div>
+        </div>
+      </div>
+    </div>
     <div class="panel">
       <p class="section-title">Color Preview (posterized fill)</p>
       <div class="canvas-wrap"><canvas id="previewCanvas" class="fitwidth"></canvas></div>
@@ -188,15 +250,26 @@
    Pure client-side pipeline:
      1. Load image at full native resolution onto a working canvas.
      2. Pre-blur (box blur) to reduce noise, strength driven by smoothing.
+        If the user has marked "detail boxes", this blur is blended with a
+        much lighter blur inside those (padded/feathered) regions so fine
+        detail survives there while the rest of the image is still cleaned
+        up normally.
      3. Convert to CIELAB and run k-means++ clustering to pick a perceptually
         distinct palette (avoids one dominant hue swallowing rare colors).
+        Detail boxes contribute extra weighted samples and a few extra
+        cluster slots, so subtle gradients inside them get their own
+        palette entries -- all still part of ONE unified palette/legend.
      4. Assign every pixel to its nearest palette color (nearest-LAB).
-     5. Post-quantization mode-filter smoothing on the label map.
+     5. Post-quantization mode-filter smoothing on the label map, applied
+        with fewer iterations (i.e. less smoothing) inside detail boxes.
      6. Connected-component labeling + union-find merging of any region
         smaller than a smoothing-dependent area threshold into its most
-        strongly adjacent neighbor.
+        strongly adjacent neighbor -- using a smaller area threshold for
+        regions that sit inside a detail box, so fine features there
+        survive the merge pass.
      7. Render: posterized color preview, and paint-by-numbers image with
         black outlines + numbers (or plain white "coloring page" background).
+        Detail-box outlines are never drawn into these exported images.
      8. Build & export a separate palette-legend PNG.
    ========================================================================= */
 
@@ -229,10 +302,79 @@
   const overlayText     = document.getElementById('overlayText');
   const paletteExportCanvas = document.getElementById('paletteExportCanvas');
 
+  // ---------- Detail-box DOM references ----------
+  const boxPanel          = document.getElementById('boxPanel');
+  const boxStage          = document.getElementById('boxStage');
+  const boxDisplayCanvas  = document.getElementById('boxDisplayCanvas');
+  const boxOverlay        = document.getElementById('boxOverlay');
+  const preserveDetailToggle = document.getElementById('preserveDetailToggle');
+  const addBoxBtn         = document.getElementById('addBoxBtn');
+  const clearBoxesBtn     = document.getElementById('clearBoxesBtn');
+  const boxStatus         = document.getElementById('boxStatus');
+
   // ---------- App state ----------
   let sourceImage = null;   // Image object
   let srcW = 0, srcH = 0;
   let lastPalette = [];     // [{r,g,b,hex}] used for exports/legend
+
+  // Resize & crop is applied BEFORE detail regions are marked (both in the
+  // control-bar order and in how the pipeline treats coordinates): the
+  // box-drawing canvas always shows the image AFTER the current resize/crop
+  // settings are applied, at exactly the pixel grid process() will actually
+  // operate on (see computeWorkingGeometry()). Detail boxes are therefore
+  // stored normalized ([0,1]) to that *working* grid, not the original
+  // upload -- so mapping a box into processing coordinates is just a plain
+  // scale by the working width/height, with no separate crop-offset math.
+  // Because that working grid depends on the resize/crop settings, changing
+  // those settings re-renders the box-drawing canvas and resets any boxes
+  // (see refreshBoxStage()), so boxes are always drawn against the correct
+  // post-crop image the pipeline will actually use.
+  let detailBoxes = [];
+  let nextBoxId = 1;
+  let tempBoxDiv = null; // the dashed preview box shown while drag-creating
+
+  // Computes the pixel grid the rest of the pipeline (and the detail-box
+  // drawing canvas) operates on, given the current resize/crop settings.
+  // With "Resize & crop" unchecked, this is just the original image at its
+  // native resolution and a full-frame "crop" (i.e. no cropping at all).
+  function computeWorkingGeometry(){
+    let w = srcW, h = srcH;
+    let cropSx = 0, cropSy = 0, cropSw = srcW, cropSh = srcH;
+    if (resizeEnabled.checked){
+      const wIn = Math.max(0.1, +targetWidthIn.value || 0);
+      const hIn = Math.max(0.1, +targetHeightIn.value || 0);
+      const dpi = Math.max(10, +targetDpi.value || 0);
+      w = Math.max(1, Math.round(wIn * dpi));
+      h = Math.max(1, Math.round(hIn * dpi));
+      // center-crop the source to the target aspect ratio ("cover" fit)
+      const targetAspect = w / h;
+      const srcAspect = srcW / srcH;
+      if (srcAspect > targetAspect){
+        cropSh = srcH; cropSw = srcH * targetAspect;
+      } else {
+        cropSw = srcW; cropSh = srcW / targetAspect;
+      }
+      cropSx = (srcW - cropSw) / 2;
+      cropSy = (srcH - cropSh) / 2;
+    }
+    return { w, h, cropSx, cropSy, cropSw, cropSh };
+  }
+
+  // Redraws the detail-box drawing canvas from the current resize/crop
+  // settings, and resets any existing boxes (their normalized coordinates
+  // were relative to the *previous* working grid, which may no longer
+  // correspond to the same region of the image).
+  function refreshBoxStage(){
+    if (!sourceImage) return;
+    const { w, h, cropSx, cropSy, cropSw, cropSh } = computeWorkingGeometry();
+    boxDisplayCanvas.width = w; boxDisplayCanvas.height = h;
+    boxDisplayCanvas.getContext('2d').drawImage(sourceImage, cropSx, cropSy, cropSw, cropSh, 0, 0, w, h);
+    detailBoxes = []; nextBoxId = 1;
+    boxPanel.style.display = 'block';
+    addBoxBtn.disabled = false; clearBoxesBtn.disabled = false;
+    renderBoxOverlay();
+    updateBoxStatus();
+  }
 
   // ---------- UI wiring ----------
   colorCountEl.addEventListener('input', () => colorCountVal.textContent = colorCountEl.value);
@@ -244,8 +386,18 @@
   }
   smoothingVal.textContent = smoothingLabel(+smoothingEl.value);
 
+  // Boxed detail regions are always processed at the highest detail tier
+  // (see process()) -- there is no user-facing "Detail Level" control.
+  const DETAIL_TIER_BOXED = 3; // 1=Low, 2=Medium, 3=High
+
   resizeEnabled.addEventListener('change', () => {
     resizeFields.style.display = resizeEnabled.checked ? 'block' : 'none';
+    refreshBoxStage(); // crop settings changed the working grid -- re-render box canvas
+  });
+  // Any change to the target size/DPI also changes the crop, so the
+  // detail-box drawing canvas (and any boxes already drawn) must refresh.
+  [targetWidthIn, targetHeightIn, targetDpi].forEach(el => {
+    el.addEventListener('change', () => { if (resizeEnabled.checked) refreshBoxStage(); });
   });
 
   dropzone.addEventListener('click', () => fileInput.click());
@@ -271,6 +423,12 @@
         imageStatus.textContent = `Loaded "${file.name}" &mdash; ${srcW}×${srcH}px`;
         imageStatus.innerHTML = imageStatus.textContent;
         generateBtn.disabled = false;
+
+        // Show the detail-box drawing stage using the current resize/crop
+        // settings (applied first, per the control-bar order), and reset
+        // any boxes left over from a previous image.
+        refreshBoxStage();
+
         runPipeline(); // auto-run once with current defaults
       };
       img.onerror = () => { imageStatus.textContent = 'Could not load that image.'; };
@@ -281,6 +439,182 @@
 
   function showOverlay(msg){ overlayText.textContent = msg; overlay.classList.add('show'); }
   function hideOverlay(){ overlay.classList.remove('show'); }
+
+  // =====================================================================
+  // Detail-box drawing / editing interactions
+  //
+  // Boxes live as plain positioned <div>s inside #boxOverlay, which sits
+  // absolutely on top of #boxDisplayCanvas inside #boxStage. Because the
+  // canvas is drawn at the image's *native* resolution but displayed at
+  // width:100% (height:auto, preserving aspect ratio), #boxStage's
+  // rendered size is always exactly the displayed image size -- whatever
+  // that happens to be after CSS scaling/zoom/window-resize. Positioning
+  // each box div with percentage left/top/width/height (rather than
+  // fixed pixels) means the box always tracks the same relative spot on
+  // the image with zero extra resize-handling code.
+  //
+  // clientToNorm() is the one place that ever touches *displayed* pixel
+  // coordinates (from mouse events) -- it immediately converts them to
+  // the same [0,1]-normalized space the boxes are stored in, by dividing
+  // by the current bounding-box size of #boxOverlay (queried fresh on
+  // every mouse event, so it stays correct even if the layout reflows
+  // mid-drag, e.g. from a window resize).
+  // =====================================================================
+
+  function clamp01(v){ return Math.max(0, Math.min(1, v)); }
+
+  function clientToNorm(clientX, clientY){
+    const rect = boxOverlay.getBoundingClientRect();
+    return {
+      x: clamp01((clientX - rect.left) / rect.width),
+      y: clamp01((clientY - rect.top) / rect.height)
+    };
+  }
+
+  function normalizeRect(x0,y0,x1,y1){
+    return { x0: Math.min(x0,x1), y0: Math.min(y0,y1), x1: Math.max(x0,x1), y1: Math.max(y0,y1) };
+  }
+
+  function updateBoxStatus(){
+    if (!sourceImage){ boxStatus.textContent = 'Upload an image to start marking detail regions.'; return; }
+    boxStatus.textContent = detailBoxes.length
+      ? `${detailBoxes.length} detail box${detailBoxes.length>1?'es':''} marked — (re)click Generate to apply.`
+      : 'No boxes yet — drag on the image above to add one.';
+  }
+
+  function renderTempBox(nb){
+    if (!tempBoxDiv){
+      tempBoxDiv = document.createElement('div');
+      tempBoxDiv.className = 'detail-box temp';
+      boxOverlay.appendChild(tempBoxDiv);
+    }
+    tempBoxDiv.style.left   = (nb.x0*100) + '%';
+    tempBoxDiv.style.top    = (nb.y0*100) + '%';
+    tempBoxDiv.style.width  = ((nb.x1-nb.x0)*100) + '%';
+    tempBoxDiv.style.height = ((nb.y1-nb.y0)*100) + '%';
+  }
+  function removeTempBox(){ if (tempBoxDiv){ tempBoxDiv.remove(); tempBoxDiv = null; } }
+
+  function renderBoxOverlay(){
+    boxOverlay.innerHTML = '';
+    detailBoxes.forEach(box => {
+      const div = document.createElement('div');
+      div.className = 'detail-box';
+      div.style.left   = (box.x0*100) + '%';
+      div.style.top    = (box.y0*100) + '%';
+      div.style.width  = ((box.x1-box.x0)*100) + '%';
+      div.style.height = ((box.y1-box.y0)*100) + '%';
+      div.innerHTML =
+        `<div class="box-label">Box ${box.id}</div>` +
+        `<div class="box-delete" title="Delete this box">&times;</div>` +
+        `<div class="handle handle-nw"></div>` +
+        `<div class="handle handle-ne"></div>` +
+        `<div class="handle handle-sw"></div>` +
+        `<div class="handle handle-se"></div>`;
+      boxOverlay.appendChild(div);
+      attachBoxDivEvents(div, box);
+    });
+  }
+
+  function attachBoxDivEvents(div, box){
+    div.addEventListener('mousedown', e => {
+      if (e.target.classList.contains('handle') || e.target.classList.contains('box-delete')) return;
+      e.preventDefault(); e.stopPropagation();
+      beginDrag('move', box, e);
+    });
+    div.querySelector('.box-delete').addEventListener('mousedown', e => { e.stopPropagation(); });
+    div.querySelector('.box-delete').addEventListener('click', e => {
+      e.preventDefault(); e.stopPropagation();
+      detailBoxes = detailBoxes.filter(b => b.id !== box.id);
+      renderBoxOverlay(); updateBoxStatus();
+    });
+    ['nw','ne','sw','se'].forEach(h => {
+      const hd = div.querySelector('.handle-'+h);
+      hd.addEventListener('mousedown', e => {
+        e.preventDefault(); e.stopPropagation();
+        beginDrag('resize-'+h, box, e);
+      });
+    });
+  }
+
+  // Shared drag controller for creating, moving, and resizing boxes.
+  // `mode` is 'create', 'move', or 'resize-<nw|ne|sw|se>'. `box` is the
+  // live box object being edited (null while creating, until mouseup).
+  function beginDrag(mode, box, e){
+    const start = clientToNorm(e.clientX, e.clientY);
+    const orig = box ? { x0:box.x0, y0:box.y0, x1:box.x1, y1:box.y1 } : null;
+
+    function onMove(ev){
+      const p = clientToNorm(ev.clientX, ev.clientY);
+      if (mode === 'create'){
+        renderTempBox(normalizeRect(start.x, start.y, p.x, p.y));
+      } else if (mode === 'move'){
+        const dx = p.x - start.x, dy = p.y - start.y;
+        const bw = orig.x1-orig.x0, bh = orig.y1-orig.y0;
+        let x0 = Math.max(0, Math.min(1-bw, orig.x0+dx));
+        let y0 = Math.max(0, Math.min(1-bh, orig.y0+dy));
+        box.x0 = x0; box.y0 = y0; box.x1 = x0+bw; box.y1 = y0+bh;
+        renderBoxOverlay();
+      } else if (mode.indexOf('resize') === 0){
+        const h = mode.split('-')[1];
+        let { x0, y0, x1, y1 } = orig;
+        if (h.indexOf('n') !== -1) y0 = clamp01(p.y);
+        if (h.indexOf('s') !== -1) y1 = clamp01(p.y);
+        if (h.indexOf('w') !== -1) x0 = clamp01(p.x);
+        if (h.indexOf('e') !== -1) x1 = clamp01(p.x);
+        const r = normalizeRect(x0,y0,x1,y1);
+        box.x0=r.x0; box.y0=r.y0; box.x1=r.x1; box.y1=r.y1;
+        renderBoxOverlay();
+      }
+    }
+
+    function onUp(ev){
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+      if (mode === 'create'){
+        const p = clientToNorm(ev.clientX, ev.clientY);
+        const r = normalizeRect(start.x, start.y, p.x, p.y);
+        removeTempBox();
+        const MIN = 0.012; // ignore accidental micro-clicks
+        if ((r.x1-r.x0) > MIN && (r.y1-r.y0) > MIN){
+          detailBoxes.push({ id: nextBoxId++, x0:r.x0, y0:r.y0, x1:r.x1, y1:r.y1 });
+        }
+        renderBoxOverlay();
+      }
+      updateBoxStatus();
+    }
+
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+  }
+
+  // Start a new box by dragging on empty overlay space (not on an
+  // existing box/handle -- those stopPropagation() before this fires).
+  boxOverlay.addEventListener('mousedown', e => {
+    if (e.target !== boxOverlay) return;
+    if (!sourceImage) return;
+    e.preventDefault();
+    beginDrag('create', null, e);
+  });
+
+  addBoxBtn.addEventListener('click', () => {
+    if (!sourceImage) return;
+    const size = 0.22;
+    // stagger repeated "Add Box" clicks slightly so new boxes don't stack exactly on top of each other
+    const jitter = ((detailBoxes.length % 5) * 0.03);
+    const cx = 0.5 + jitter, cy = 0.5 + jitter;
+    detailBoxes.push({
+      id: nextBoxId++,
+      x0: clamp01(cx-size/2), y0: clamp01(cy-size/2),
+      x1: clamp01(cx+size/2), y1: clamp01(cy+size/2)
+    });
+    renderBoxOverlay(); updateBoxStatus();
+  });
+
+  clearBoxesBtn.addEventListener('click', () => {
+    detailBoxes = [];
+    renderBoxOverlay(); updateBoxStatus();
+  });
 
   // =====================================================================
   // Color space helpers: sRGB <-> CIELAB (D65 reference white)
@@ -368,6 +702,120 @@
   }
 
   // =====================================================================
+  // Detail-box coordinate mapping & mask building
+  // =====================================================================
+
+  // Maps a normalized [0,1] box into pixel coordinates of the *working*
+  // canvas (the pixel grid process() actually operates on, post crop/
+  // resize). Because resize & crop is applied BEFORE detail regions are
+  // marked, the box-drawing canvas already shows exactly that working
+  // grid (see refreshBoxStage()) -- so boxes are already normalized to
+  // it, and mapping one in is just a plain scale by (w,h), with no
+  // separate crop-offset math needed here.
+  function mapBoxToWorking(box, w, h){
+    let x0 = box.x0*w, y0 = box.y0*h, x1 = box.x1*w, y1 = box.y1*h;
+    x0 = Math.max(0, Math.min(w, x0)); x1 = Math.max(0, Math.min(w, x1));
+    y0 = Math.max(0, Math.min(h, y0)); y1 = Math.max(0, Math.min(h, y1));
+    if (x1-x0 < 1 || y1-y0 < 1) return null;
+    return { x0, y0, x1, y1 };
+  }
+
+  // 1D "ramp" falloff: 1 inside [lo,hi], linearly decaying to 0 across a
+  // margin of `pad` pixels outside it. Used on x and y independently and
+  // multiplied together, which gives a feathered rectangle (soft corners
+  // are slightly more square than a true radial feather, but this is
+  // cheap, has no directional artifacts, and is plenty smooth for photo
+  // processing purposes).
+  function axisFalloff(v, lo, hi, pad){
+    if (v >= lo && v <= hi) return 1;
+    if (v < lo) return Math.max(0, 1 - (lo-v)/pad);
+    return Math.max(0, 1 - (v-hi)/pad);
+  }
+
+  // Builds two masks over the working (w x h) pixel grid from a list of
+  // working-space boxes:
+  //   - alpha:   Float32Array, 0..1 continuous "how strongly in detail
+  //              mode" a pixel is. 1.0 well inside a box, ramping down to
+  //              0 across a padding/feather margin -- used to smoothly
+  //              BLEND continuous quantities (the pre-quantization blur).
+  //   - inside:  Uint8Array, boolean (alpha>=0.5) -- used for discrete
+  //              choices where blending doesn't make sense (which label
+  //              map / which merge threshold to use for a given pixel).
+  // Only iterates the padded bounding box of each box, not the whole
+  // image, so cost scales with box area rather than image size.
+  function buildDetailMasks(workingBoxes, w, h){
+    const alpha = new Float32Array(w*h);
+    const inside = new Uint8Array(w*h);
+    for (const box of workingBoxes){
+      const bw = box.x1-box.x0, bh = box.y1-box.y0;
+      const pad = Math.max(3, Math.round(Math.min(bw,bh) * 0.12));
+      const minX = Math.max(0, Math.floor(box.x0-pad)), maxX = Math.min(w-1, Math.ceil(box.x1+pad));
+      const minY = Math.max(0, Math.floor(box.y0-pad)), maxY = Math.min(h-1, Math.ceil(box.y1+pad));
+      for (let y=minY; y<=maxY; y++){
+        const ay = axisFalloff(y, box.y0, box.y1, pad);
+        if (ay <= 0) continue;
+        const rowBase = y*w;
+        for (let x=minX; x<=maxX; x++){
+          const ax = axisFalloff(x, box.x0, box.x1, pad);
+          const a = ax*ay;
+          if (a <= 0) continue;
+          const idx = rowBase+x;
+          if (a > alpha[idx]) alpha[idx] = a;
+          if (a >= 0.5) inside[idx] = 1;
+        }
+      }
+    }
+    return { alpha, inside };
+  }
+
+  // Builds the LAB sample array fed into k-means. In addition to the
+  // normal uniform-stride sample of the whole image, when detail boxes
+  // are active it draws extra samples specifically from inside those
+  // boxes (bounded by a fixed overall budget so huge/many boxes don't
+  // blow up run time) -- this is what lets k-means actually "notice" and
+  // allocate cluster centroids to fine gradients that only occupy a
+  // small fraction of total image area.
+  function buildSamples(data, w, h, preserveDetail, workingBoxes){
+    const totalPx = w*h;
+    const maxSamples = 30000;
+    const stride = Math.max(1, Math.floor(totalPx / maxSamples));
+    const baseCount = Math.floor(totalPx / stride);
+
+    const extraIdx = [];
+    if (preserveDetail && workingBoxes.length){
+      const totalBudget = 6000;
+      const perBoxBudget = Math.max(200, Math.floor(totalBudget / workingBoxes.length));
+      for (const box of workingBoxes){
+        const bx0 = Math.round(box.x0), by0 = Math.round(box.y0);
+        const bx1 = Math.max(bx0+1, Math.round(box.x1)), by1 = Math.max(by0+1, Math.round(box.y1));
+        const bw = bx1-bx0, bh = by1-by0, area = bw*bh;
+        const want = Math.min(perBoxBudget, area);
+        const bstride = Math.max(1, Math.floor(area/want));
+        let taken = 0;
+        for (let lin=0; lin<area && taken<want; lin+=bstride){
+          const yy = by0 + Math.floor(lin/bw), xx = bx0 + (lin%bw);
+          if (xx>=0 && xx<w && yy>=0 && yy<h){ extraIdx.push(yy*w+xx); taken++; }
+        }
+      }
+    }
+
+    const sampleCount = baseCount + extraIdx.length;
+    const samplesLab = new Float32Array(sampleCount*3);
+    let s = 0;
+    for (let px=0; px<totalPx && s<baseCount; px+=stride){
+      const o = px*4;
+      const lab = rgb2lab(data[o], data[o+1], data[o+2]);
+      samplesLab[s*3]=lab[0]; samplesLab[s*3+1]=lab[1]; samplesLab[s*3+2]=lab[2]; s++;
+    }
+    for (const px of extraIdx){
+      const o = px*4;
+      const lab = rgb2lab(data[o], data[o+1], data[o+2]);
+      samplesLab[s*3]=lab[0]; samplesLab[s*3+1]=lab[1]; samplesLab[s*3+2]=lab[2]; s++;
+    }
+    return { samplesLab, sampleCount };
+  }
+
+  // =====================================================================
   // K-means++ clustering in LAB space
   // =====================================================================
   function kmeansPlusPlusInit(samples, n, k, rng){
@@ -449,31 +897,29 @@
   }
 
   function process(){
-    const numColors = +colorCountEl.value;
+    let numColors = +colorCountEl.value;
     const smoothing = +smoothingEl.value; // 0-100
     const printable = coloringMode.checked;
+    const detailTier = DETAIL_TIER_BOXED; // always High -- no user control for this
+    const preserveDetail = preserveDetailToggle.checked && detailBoxes.length > 0;
 
     // --- optional resize & crop to a fixed physical size (inches @ DPI) ---
     // Default (unchecked) leaves the image at its native resolution with no
-    // cropping at all, matching the original full-resolution behavior.
-    let w = srcW, h = srcH;
-    let cropSx = 0, cropSy = 0, cropSw = srcW, cropSh = srcH;
-    if (resizeEnabled.checked){
-      const wIn = Math.max(0.1, +targetWidthIn.value || 0);
-      const hIn = Math.max(0.1, +targetHeightIn.value || 0);
-      const dpi = Math.max(10, +targetDpi.value || 0);
-      w = Math.max(1, Math.round(wIn * dpi));
-      h = Math.max(1, Math.round(hIn * dpi));
-      // center-crop the source to the target aspect ratio ("cover" fit)
-      const targetAspect = w / h;
-      const srcAspect = srcW / srcH;
-      if (srcAspect > targetAspect){
-        cropSh = srcH; cropSw = srcH * targetAspect;
-      } else {
-        cropSw = srcW; cropSh = srcW / targetAspect;
-      }
-      cropSx = (srcW - cropSw) / 2;
-      cropSy = (srcH - cropSh) / 2;
+    // cropping at all, matching the original full-resolution behavior. This
+    // is applied first (see computeWorkingGeometry()) -- detail boxes below
+    // are already normalized to this exact working grid, since that's what
+    // the box-drawing canvas showed the user (see refreshBoxStage()).
+    const { w, h, cropSx, cropSy, cropSw, cropSh } = computeWorkingGeometry();
+
+    // --- map user-drawn detail boxes into this working canvas's pixel
+    //     space (see mapBoxToWorking() for the full explanation) ---
+    const workingBoxes = preserveDetail
+      ? detailBoxes.map(b => mapBoxToWorking(b, w, h)).filter(Boolean)
+      : [];
+    let detailAlpha = null, detailInside = null;
+    if (workingBoxes.length){
+      const masks = buildDetailMasks(workingBoxes, w, h);
+      detailAlpha = masks.alpha; detailInside = masks.inside;
     }
 
     // --- draw the (possibly cropped/resized) image onto the working canvas ---
@@ -482,31 +928,51 @@
     const sctx = srcCanvas.getContext('2d');
     sctx.drawImage(sourceImage, cropSx, cropSy, cropSw, cropSh, 0, 0, w, h);
     let imgData = sctx.getImageData(0, 0, w, h);
-    let data = imgData.data;
+    const rawData = imgData.data; // pristine pre-blur pixels; always the blur source
+    let data = rawData;
 
     // --- 1. pre-quantization blur (reduces noise before clustering) ---
     const blurRadius = Math.round((smoothing/100) * 3); // 0..3
-    if (blurRadius > 0){
+    if (detailAlpha){
+      // Detail boxes active: blend a normal "full" blur with a much
+      // lighter blur, weighted per-pixel by the feathered detail-alpha
+      // mask, so boxed regions keep more of their original sharpness
+      // while the rest of the image is smoothed exactly as before.
+      const detailFactor = { 1: 0.55, 2: 0.30, 3: 0.08 }[detailTier];
+      const blurRadiusLight = Math.max(0, Math.round(blurRadius * detailFactor));
+      const dataFull = blurRadius>0 ? boxBlur(rawData, w, h, blurRadius, 2) : rawData;
+      const dataLight = blurRadiusLight>0 ? boxBlur(rawData, w, h, blurRadiusLight, 2) : rawData;
+      if (dataFull !== dataLight){
+        const blended = new Uint8ClampedArray(rawData.length);
+        for (let px=0; px<w*h; px++){
+          const o = px*4, a = detailAlpha[px];
+          blended[o]   = dataFull[o]  *(1-a) + dataLight[o]  *a;
+          blended[o+1] = dataFull[o+1]*(1-a) + dataLight[o+1]*a;
+          blended[o+2] = dataFull[o+2]*(1-a) + dataLight[o+2]*a;
+          blended[o+3] = 255;
+        }
+        data = blended;
+      } else {
+        data = dataFull;
+      }
+    } else if (blurRadius > 0){
       data = boxBlur(data, w, h, blurRadius, 2);
     }
 
-    // --- 2. sample pixels & convert to LAB for clustering ---
-    const totalPx = w*h;
-    const maxSamples = 30000;
-    const stride = Math.max(1, Math.floor(totalPx / maxSamples));
-    const sampleCount = Math.floor(totalPx / stride);
-    const samplesLab = new Float32Array(sampleCount*3);
-    {
-      let s=0;
-      for (let i=0, px=0; px<totalPx && s<sampleCount; px+=stride, i++){
-        const o = px*4;
-        const lab = rgb2lab(data[o], data[o+1], data[o+2]);
-        samplesLab[s*3]=lab[0]; samplesLab[s*3+1]=lab[1]; samplesLab[s*3+2]=lab[2];
-        s++;
-      }
-    }
+    // --- 2. sample pixels & convert to LAB for clustering (with extra
+    //        weighted samples from inside detail boxes, if any) ---
+    const { samplesLab, sampleCount } = buildSamples(data, w, h, preserveDetail, workingBoxes);
 
     // --- 3. k-means++ clustering to get a perceptually distinct palette ---
+    // When detail boxes are active, a few extra cluster slots are added
+    // so fine gradients inside the boxes can get their own palette entry
+    // -- this is still ONE k-means run producing ONE unified palette used
+    // everywhere in the image, not a separate disconnected box palette.
+    if (preserveDetail && workingBoxes.length){
+      const perLevel = { 1: 2, 2: 5, 3: 9 }[detailTier];
+      const extraColors = Math.min(12, perLevel + Math.max(0, workingBoxes.length-1));
+      numColors = numColors + extraColors;
+    }
     const k = Math.min(numColors, sampleCount);
     const seedVal = parseInt(randomSeedEl.value, 10);
     const centroidsLab = runKMeans(samplesLab, sampleCount, k, 10, seedVal);
@@ -526,7 +992,8 @@
     sortedOrder.forEach((oldIdx, newIdx) => { oldToNew[oldIdx] = newIdx; });
 
     // --- 4. assign every pixel to nearest palette color (full resolution) ---
-    const labelMap = new Uint8Array(totalPx); // supports up to 255 colors, plenty for k<=30
+    const labelMap = new Uint8Array(w*h); // supports up to 255 colors, plenty for k<=42
+    const totalPx = w*h;
     {
       // precompute per-pixel LAB on the fly to save memory for huge images
       for (let px=0; px<totalPx; px++){
@@ -544,15 +1011,43 @@
     }
 
     // --- 5. post-quantization mode-filter smoothing on the label map ---
+    // Inside detail boxes, fewer smoothing iterations are applied (High
+    // detail level skips this step entirely there) so small distinct
+    // regions aren't blurred away before the region-merge step below.
     const smoothIterations = smoothing<20 ? 0 : smoothing<45 ? 1 : smoothing<75 ? 2 : 3;
     let curLabels = labelMap;
-    for (let it=0; it<smoothIterations; it++){
-      curLabels = modeFilter(curLabels, w, h, k);
+    if (preserveDetail && workingBoxes.length && smoothIterations > 0){
+      const reduceBy = { 1: 1, 2: 2, 3: smoothIterations }[detailTier];
+      const insideIterations = Math.max(0, smoothIterations - reduceBy);
+      let insideSnapshot = insideIterations === 0 ? labelMap.slice() : null;
+      for (let it=0; it<smoothIterations; it++){
+        curLabels = modeFilter(curLabels, w, h, k);
+        if (it+1 === insideIterations) insideSnapshot = curLabels.slice();
+      }
+      if (!insideSnapshot) insideSnapshot = curLabels; // insideIterations === smoothIterations (no difference)
+      if (insideIterations !== smoothIterations){
+        const combined = new Uint8Array(curLabels.length);
+        for (let i=0; i<combined.length; i++){
+          combined[i] = detailInside[i] ? insideSnapshot[i] : curLabels[i];
+        }
+        curLabels = combined;
+      }
+    } else {
+      for (let it=0; it<smoothIterations; it++) curLabels = modeFilter(curLabels, w, h, k);
     }
 
     // --- 6. connected components + merge tiny regions into best neighbor ---
+    // Regions that fall mostly inside a detail box use a smaller minimum
+    // area threshold, so fine features there aren't merged away, while
+    // regions elsewhere still use the normal (larger, smoothing-dependent)
+    // threshold for a clean, easily-paintable result.
     const minArea = Math.max(2, Math.min(4000, Math.round((smoothing/100) * 0.0012 * totalPx)));
-    const merged = mergeSmallRegions(curLabels, w, h, k, minArea);
+    let minAreaBox = minArea;
+    if (preserveDetail && workingBoxes.length){
+      const factor = { 1: 0.5, 2: 0.25, 3: 0.08 }[detailTier];
+      minAreaBox = Math.max(1, Math.round(minArea * factor));
+    }
+    const merged = mergeSmallRegions(curLabels, w, h, k, minArea, minAreaBox, (preserveDetail && workingBoxes.length) ? detailInside : null);
     // merged: {finalLabelMap (Uint8Array, palette idx per pixel), regionId (Int32Array), regions:[{id,area,cx,cy,colorIdx}]}
 
     // percentage of the image's total area covered by each final color
@@ -597,11 +1092,17 @@
   // union-find merge of tiny regions into their most strongly bordering
   // neighbor. Returns finalized per-pixel palette label + region metadata
   // for outline drawing and number placement.
-  function mergeSmallRegions(labels, w, h, k, minArea){
+  //
+  // insideMask (nullable Uint8Array, w*h): if provided, each component
+  // tracks what fraction of its pixels fall inside a detail box; if that
+  // majority holds (>50%), `minAreaBox` (typically smaller) is used as its
+  // survive-without-merging threshold instead of the normal `minArea`.
+  function mergeSmallRegions(labels, w, h, k, minArea, minAreaBox, insideMask){
     const total = w*h;
     const compId = new Int32Array(total).fill(-1);
     const compColor = []; // palette color index per component id
     const compArea = [];
+    const compInside = []; // count of insideMask pixels per component
     let nextComp = 0;
     const stackX = new Int32Array(total);
     const stackY = new Int32Array(total);
@@ -615,10 +1116,12 @@
         stackX[sp]=x; stackY[sp]=y; sp++;
         compId[idx] = nextComp;
         let area = 0;
+        let insideCount = 0;
         while (sp>0){
           sp--;
           const cx=stackX[sp], cy=stackY[sp];
           area++;
+          if (insideMask && insideMask[cy*w+cx]) insideCount++;
           const neighbors = [[cx+1,cy],[cx-1,cy],[cx,cy+1],[cx,cy-1]];
           for (const [nx,ny] of neighbors){
             if (nx<0||nx>=w||ny<0||ny>=h) continue;
@@ -631,6 +1134,7 @@
         }
         compColor.push(lbl);
         compArea.push(area);
+        compInside.push(insideCount);
         nextComp++;
       }
     }
@@ -665,7 +1169,9 @@
     // process components smallest-first; merge into strongest neighbor
     const order = Array.from({length:nextComp}, (_,i)=>i).sort((a,b)=>compArea[a]-compArea[b]);
     for (const comp of order){
-      if (compArea[comp] >= minArea) continue;
+      const mostlyInsideBox = insideMask && compArea[comp]>0 && (compInside[comp]/compArea[comp]) > 0.5;
+      const effMinArea = mostlyInsideBox ? minAreaBox : minArea;
+      if (compArea[comp] >= effMinArea) continue;
       const root = find(comp);
       if (root !== comp) continue; // already absorbed
       let best=-1, bestCount=-1;
@@ -760,6 +1266,10 @@
     pctx.putImageData(previewData,0,0);
 
     // ---- Paint-by-numbers output (outlines + numbers) ----
+    // Note: this canvas (and the color-preview canvas above) are rendered
+    // purely from the final label/region data -- detail-box rectangles
+    // are UI-only elements drawn in a completely separate DOM overlay
+    // (#boxOverlay) and never touch these canvases or the exported PNGs.
     outlineCanvas.width = w; outlineCanvas.height = h;
     const octx = outlineCanvas.getContext('2d');
     if (printable){
@@ -890,7 +1400,8 @@
   // Export: three PNG downloads (paint-by-numbers image, palette legend,
   // and color preview). Only the paint-by-numbers PNG has its DPI metadata
   // set to 150 (via the PNG pHYs chunk) -- the other two files are saved
-  // exactly as the canvas produces them, with no DPI tag changed.
+  // exactly as the canvas produces them, with no DPI tag changed. Detail
+  // boxes are UI overlay only and never appear in any exported file.
   // =====================================================================
   const PBN_EXPORT_DPI = 150;
 
