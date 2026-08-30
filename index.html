@@ -148,6 +148,10 @@
 
     <h2 style="margin-top:18px;">2. Resize &amp; Crop</h2>
     <div class="toggle-row">
+      <label for="flipHorizontal">Flip horizontally</label>
+      <input type="checkbox" id="flipHorizontal" style="width:18px;height:18px;flex:0 0 18px;">
+    </div>
+    <div class="toggle-row">
       <label for="resizeEnabled">Resize &amp; crop to a fixed size</label>
       <input type="checkbox" id="resizeEnabled" style="width:18px;height:18px;flex:0 0 18px;">
     </div>
@@ -287,6 +291,7 @@
   const smoothingVal  = document.getElementById('smoothingVal');
   const coloringMode  = document.getElementById('coloringMode');
   const showNumbers   = document.getElementById('showNumbers');
+  const flipHorizontal = document.getElementById('flipHorizontal');
   const resizeEnabled = document.getElementById('resizeEnabled');
   const resizeFields  = document.getElementById('resizeFields');
   const targetWidthIn = document.getElementById('targetWidthIn');
@@ -364,11 +369,25 @@
   // settings, and resets any existing boxes (their normalized coordinates
   // were relative to the *previous* working grid, which may no longer
   // correspond to the same region of the image).
+  // Draws the (possibly cropped) source image onto the given context at
+  // exactly w×h, honoring the "Flip horizontally" toggle. Mirroring the
+  // whole destination canvas is equivalent to flipping the cropped source
+  // region itself, since the crop is always centered (symmetric).
+  function drawWorkingImage(ctx, w, h, cropSx, cropSy, cropSw, cropSh){
+    ctx.save();
+    if (flipHorizontal.checked){
+      ctx.translate(w, 0);
+      ctx.scale(-1, 1);
+    }
+    ctx.drawImage(sourceImage, cropSx, cropSy, cropSw, cropSh, 0, 0, w, h);
+    ctx.restore();
+  }
+
   function refreshBoxStage(){
     if (!sourceImage) return;
     const { w, h, cropSx, cropSy, cropSw, cropSh } = computeWorkingGeometry();
     boxDisplayCanvas.width = w; boxDisplayCanvas.height = h;
-    boxDisplayCanvas.getContext('2d').drawImage(sourceImage, cropSx, cropSy, cropSw, cropSh, 0, 0, w, h);
+    drawWorkingImage(boxDisplayCanvas.getContext('2d'), w, h, cropSx, cropSy, cropSw, cropSh);
     detailBoxes = []; nextBoxId = 1;
     boxPanel.style.display = 'block';
     addBoxBtn.disabled = false; clearBoxesBtn.disabled = false;
@@ -389,6 +408,11 @@
   // Boxed detail regions are always processed at the highest detail tier
   // (see process()) -- there is no user-facing "Detail Level" control.
   const DETAIL_TIER_BOXED = 3; // 1=Low, 2=Medium, 3=High
+
+  flipHorizontal.addEventListener('change', () => {
+    refreshBoxStage(); // mirrored image changes the working grid -- re-render box canvas
+    runPipeline(); // also keep the color preview & paint-by-numbers output in sync with the flip
+  });
 
   resizeEnabled.addEventListener('change', () => {
     resizeFields.style.display = resizeEnabled.checked ? 'block' : 'none';
@@ -926,7 +950,7 @@
     const srcCanvas = document.createElement('canvas');
     srcCanvas.width = w; srcCanvas.height = h;
     const sctx = srcCanvas.getContext('2d');
-    sctx.drawImage(sourceImage, cropSx, cropSy, cropSw, cropSh, 0, 0, w, h);
+    drawWorkingImage(sctx, w, h, cropSx, cropSy, cropSw, cropSh);
     let imgData = sctx.getImageData(0, 0, w, h);
     const rawData = imgData.data; // pristine pre-blur pixels; always the blur source
     let data = rawData;
