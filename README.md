@@ -22,9 +22,11 @@ Colors are chosen using a perceptually-aware clustering approach that works in a
 
 An adjustable smoothing setting controls how clean and simplified the final regions look. Lower settings preserve more fine detail and texture; higher settings blur out noise before color selection, smooth jagged region borders, and merge away tiny stray specks into their neighboring region. This makes it easy to trade off between a highly detailed result and a simpler, easier-to-paint result.
 
+A separate Line Smoothing setting runs as a final cleanup pass over the finished outlines, rounding off small, wiggly offshoots along region borders so the shapes are easier to trace and paint. It doesn't change the palette or how many colors are used. On the rare occasion it smooths a region apart into two separate pieces, both pieces still get correctly numbered.
+
 ## Numbering behavior
 
-Numbers are placed at the most interior point of each region — the spot farthest from any outline — so they stay readable and don't overlap the region's edges. Regions that are too small or too thin to fit a number cleanly are simply left unlabeled rather than crowding the image. If two candidate labels would end up landing too close together, the smaller region's label is skipped in favor of the larger one. Numbers can also be turned off entirely if you only want the outlines.
+Numbers are placed at the most interior point of each region — the spot farthest from any outline — so they stay readable and don't overlap the region's edges. Regions that are too small or too thin to fit a number cleanly are simply left unlabeled rather than crowding the image. If two candidate labels would end up landing too close together, the smaller region's label is skipped in favor of the larger one. For regions that are large or spread out — a big sky, or a long, winding, branching shape — the same number is repeated at several well-spaced interior points across the region, so it's always clear which color to use no matter where you're currently painting. Numbers can also be turned off entirely if you only want the outlines.
 
 ## Style options
 
