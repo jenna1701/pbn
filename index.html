@@ -88,6 +88,7 @@
   }
   .swatch .info{font-size:11px; line-height:1.35;}
   .swatch .info .hex{font-weight:700;}
+  .swatch .info .recipe{margin-top:2px; color:var(--accent, #5a544c);}
   .overlay{
     position:fixed; inset:0; background:rgba(255,255,255,.85); display:none;
     align-items:center; justify-content:center; flex-direction:column; z-index:999;
@@ -251,6 +252,19 @@
       </div>
     </div>
 
+    <div class="collapsible">
+      <div class="collapsible-header collapsed" data-target="secBody5">
+        <h2>5. Paint Brand</h2><span class="chev">&#9662;</span>
+      </div>
+      <div class="collapsible-body collapsed" id="secBody5">
+        <div class="field">
+          <label>Match legend colors to real paints</label>
+          <select id="paintBrandSelect"><option value="">None (hex/RGB only)</option></select>
+        </div>
+        <div class="status" id="paintBrandStatus"></div>
+      </div>
+    </div>
+
     <button class="primary" id="generateBtn" disabled>Generate Paint-by-Numbers</button>
     <button class="secondary" id="saveBtn" disabled>Save Images (3 files)</button>
     <div class="status" id="genStatus"></div>
@@ -290,6 +304,8 @@
 <!-- Hidden canvas used purely for building the exportable palette-legend PNG -->
 <canvas id="paletteExportCanvas" style="display:none;"></canvas>
 
+<script src="vendor/mixbox.js"></script>
+<script src="paint-mixer.js"></script>
 <script>
 /* =========================================================================
    PAINT-BY-NUMBERS GENERATOR
@@ -360,6 +376,8 @@
   const overlay        = document.getElementById('overlay');
   const overlayText     = document.getElementById('overlayText');
   const paletteExportCanvas = document.getElementById('paletteExportCanvas');
+  const paintBrandSelect = document.getElementById('paintBrandSelect');
+  const paintBrandStatus = document.getElementById('paintBrandStatus');
 
   // ---------- Detail-box DOM references ----------
   const boxPanel          = document.getElementById('boxPanel');
@@ -375,6 +393,9 @@
   let sourceImage = null;   // Image object
   let srcW = 0, srcH = 0;
   let lastPalette = [];     // [{r,g,b,hex}] used for exports/legend
+  let paletteRegistry = []; // [{id,label,paints:[{hex,name,code}]}], from palettes/manifest.js
+  const brandTables = new Map(); // brand id -> PaintMixer table (cached after first build)
+  let lastRecipes = null;   // parallel to lastPalette: [{recipeLabel,deltaE,resultHex}] | null
 
   // Resize & crop is applied BEFORE detail regions are marked (both in the
   // control-bar order and in how the pipeline treats coordinates): the
@@ -460,6 +481,8 @@
   colorCountEl.addEventListener('input', () => colorCountVal.textContent = colorCountEl.value);
   smoothingEl.addEventListener('input', () => smoothingVal.textContent = smoothingLabel(+smoothingEl.value));
   lineSmoothingEl.addEventListener('input', () => lineSmoothingVal.textContent = smoothingLabel(+lineSmoothingEl.value));
+  paintBrandSelect.addEventListener('change', refreshBrandRecipes);
+  initPaletteRegistry();
 
   function smoothingLabel(v){
     let tier = v < 20 ? 'None' : v < 45 ? 'Low' : v < 75 ? 'Medium' : 'High';
@@ -526,6 +549,109 @@
 
   function showOverlay(msg){ overlayText.textContent = msg; overlay.classList.add('show'); }
   function hideOverlay(){ overlay.classList.remove('show'); }
+
+  // =====================================================================
+  // Paint Brand: real-paint mixing recipes for each legend color, via
+  // paint-mixer.js (mixbox latent-space pigment mixing + CIELAB nearest-
+  // neighbor search). Palettes are pure data -- adding a brand means adding
+  // a palettes/<id>.js file and one entry in palettes/manifest.js, with no
+  // code changes; this loads that registry once at startup.
+  // =====================================================================
+  // Loads a script by URL and resolves once it's run (or rejects on error).
+  // Used instead of fetch()/XHR for the palette registry because browsers
+  // block fetch() against file:// pages, but a plain <script src> -- same
+  // as vendor/mixbox.js above -- loads fine whether this page is opened
+  // directly as a file or served over http(s).
+  function loadScript(src){
+    return new Promise((resolve, reject) => {
+      const s = document.createElement('script');
+      s.src = src;
+      s.onload = () => resolve();
+      s.onerror = () => reject(new Error('Failed to load ' + src));
+      document.head.appendChild(s);
+    });
+  }
+
+  function initPaletteRegistry(){
+    loadScript('palettes/manifest.js')
+      .then(() => {
+        const manifest = window.PBN_PALETTE_MANIFEST || [];
+        return Promise.all(manifest.map(entry =>
+          loadScript('palettes/' + entry.file).then(() => {
+            const data = (window.PBN_PALETTES || {})[entry.id];
+            if (!data) throw new Error('palettes/' + entry.file + ' did not register "' + entry.id + '"');
+            const paints = Object.keys(data).map(hex => ({
+              hex, name: data[hex].name, code: data[hex].code
+            }));
+            return { id: entry.id, label: entry.label, paints };
+          })
+        ));
+      })
+      .then(brands => {
+        paletteRegistry = brands;
+        brands.forEach(brand => {
+          const opt = document.createElement('option');
+          opt.value = brand.id; opt.textContent = brand.label;
+          paintBrandSelect.appendChild(opt);
+        });
+      })
+      .catch(err => {
+        console.error(err);
+        paintBrandStatus.textContent = 'Paint-brand recipes unavailable: ' + err.message;
+      });
+  }
+
+  // Recomputes lastRecipes for the currently selected brand (or clears it),
+  // then re-renders the legend/export so they stay in sync with lastPalette.
+  function refreshBrandRecipes(){
+    const brandId = paintBrandSelect.value;
+    if (!brandId || !lastPalette.length){
+      lastRecipes = null;
+      paintBrandStatus.textContent = '';
+      renderPaletteLegend(lastPalette, lastRecipes);
+      return;
+    }
+    const brand = paletteRegistry.find(b => b.id === brandId);
+    if (!brand){
+      lastRecipes = null;
+      renderPaletteLegend(lastPalette, lastRecipes);
+      return;
+    }
+    const hexes = lastPalette.map(c => c.hex);
+    const finish = () => {
+      try {
+        const table = brandTables.get(brandId);
+        lastRecipes = PaintMixer.matchPalette(hexes, table);
+        paintBrandStatus.textContent = table.model === 'mixbox'
+          ? ''
+          : 'Note: mixbox library not loaded -- using an approximate mixing model.';
+      } catch(err){
+        console.error(err);
+        lastRecipes = null;
+        paintBrandStatus.textContent = 'Could not compute paint recipes: ' + err.message;
+      }
+      renderPaletteLegend(lastPalette, lastRecipes);
+    };
+    if (brandTables.has(brandId)){
+      finish();
+      return;
+    }
+    showOverlay('Building paint-mixing recipes for ' + brand.label + '…');
+    setTimeout(() => {
+      try {
+        brandTables.set(brandId, PaintMixer.buildTable(brand.paints));
+      } catch(err){
+        console.error(err);
+        lastRecipes = null;
+        paintBrandStatus.textContent = 'Could not build paint recipes: ' + err.message;
+        renderPaletteLegend(lastPalette, lastRecipes);
+        hideOverlay();
+        return;
+      }
+      finish();
+      hideOverlay();
+    }, 30);
+  }
 
   // =====================================================================
   // Detail-box drawing / editing interactions
@@ -973,6 +1099,7 @@
         process();
         genStatus.textContent = 'Done.';
         saveBtn.disabled = false;
+        refreshBrandRecipes();
       } catch(err){
         console.error(err);
         genStatus.textContent = 'Error: ' + err.message;
@@ -1164,7 +1291,7 @@
     });
 
     renderOutputs(finalStructure, w, h, printable, showNumbers.checked);
-    renderPaletteLegend(lastPalette);
+    renderPaletteLegend(lastPalette, lastRecipes);
   }
 
   // Mode filter: 3x3 neighborhood majority vote, ping-pong buffer.
@@ -1698,15 +1825,19 @@
     }
   }
 
-  function renderPaletteLegend(palette){
+  function renderPaletteLegend(palette, recipes){
     paletteGrid.innerHTML = '';
     palette.forEach((c, i) => {
       const div = document.createElement('div');
       div.className = 'swatch';
       const lum = 0.2126*c.r+0.7152*c.g+0.0722*c.b;
+      const recipe = recipes && recipes[i];
+      const recipeLine = recipe
+        ? `<div class="recipe">${recipe.recipeLabel} <span style="opacity:.7;">(&Delta;E ${recipe.deltaE.toFixed(1)})</span></div>`
+        : '';
       div.innerHTML = `
         <div class="chip" style="background:${c.hex}; color:${lum>140?'#000':'#fff'}; text-shadow:none;">${i+1}</div>
-        <div class="info"><div class="hex">${c.hex} &mdash; ${formatPercent(c.percent)}</div><div>RGB(${c.r}, ${c.g}, ${c.b})</div></div>`;
+        <div class="info"><div class="hex">${c.hex} &mdash; ${formatPercent(c.percent)}</div><div>RGB(${c.r}, ${c.g}, ${c.b})</div>${recipeLine}</div>`;
       paletteGrid.appendChild(div);
     });
   }
@@ -1730,7 +1861,7 @@
     if (!lastPalette.length) return;
     downloadCanvasPNG(outlineCanvas, 'paint-by-numbers.png', PBN_EXPORT_DPI);
     setTimeout(() => {
-      buildPaletteExportCanvas(lastPalette);
+      buildPaletteExportCanvas(lastPalette, lastRecipes);
       downloadCanvasPNG(paletteExportCanvas, 'color-palette.png');
       setTimeout(() => {
         downloadCanvasPNG(previewCanvas, 'color-preview.png');
@@ -1809,10 +1940,10 @@
     return (crc ^ 0xFFFFFFFF) >>> 0;
   }
 
-  function buildPaletteExportCanvas(palette){
-    const cols = 4;
+  function buildPaletteExportCanvas(palette, recipes){
+    const cols = recipes ? 2 : 4;
     const rows = Math.ceil(palette.length/cols);
-    const cellW = 280, cellH = 90, pad = 20, headerH = 60;
+    const cellW = recipes ? 460 : 280, cellH = recipes ? 108 : 90, pad = 20, headerH = 60;
     const w = cols*cellW + pad*2;
     const h = rows*cellH + pad*2 + headerH;
     paletteExportCanvas.width = w; paletteExportCanvas.height = h;
@@ -1846,6 +1977,14 @@
       ctx.fillStyle = '#5a544c';
       ctx.fillText(`RGB(${c.r}, ${c.g}, ${c.b})`, x+72, y+30);
       ctx.fillText(`Color #${i+1}`, x+72, y+48);
+      const recipe = recipes && recipes[i];
+      if (recipe){
+        ctx.font = '12px Arial, sans-serif';
+        ctx.fillStyle = '#2b2a28';
+        ctx.fillText(recipe.recipeLabel, x+72, y+66, cellW-84);
+        ctx.fillStyle = '#5a544c';
+        ctx.fillText(`ΔE ${recipe.deltaE.toFixed(1)}`, x+72, y+84);
+      }
     });
   }
 
