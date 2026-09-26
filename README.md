@@ -1,10 +1,10 @@
 # Paint-by-Numbers Generator
 
-Visit [https://jenna1701.github.io/pbn/](https://jenna1701.github.io/pbn/) to use the interative paint-by-numbers generator.
+Visit [https://jenna1701.github.io/pbn/](https://jenna1701.github.io/pbn/) to use the custom paint-by-numbers generator.
 
 ## What is it
 
-A single-page web app that turns any photo into a printable paint-by-numbers image, along with a matching color palette legend. Everything runs locally in the browser — no images are ever uploaded to a server, and the app works as a static file on any web host, including GitHub Pages.
+A single-page web app that turns any photo into a printable paint-by-numbers image, along with a matching color palette legend. Everything runs locally in the browser — *no images are ever uploaded to a server*, and the app works as a static file on any web host, including GitHub Pages.
 
 ## What it does
 
