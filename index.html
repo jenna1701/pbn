@@ -1833,7 +1833,7 @@
       const lum = 0.2126*c.r+0.7152*c.g+0.0722*c.b;
       const recipe = recipes && recipes[i];
       const recipeLine = recipe
-        ? `<div class="recipe">${recipe.recipeLabel} <span style="opacity:.7;">(&Delta;E ${recipe.deltaE.toFixed(1)})</span></div>`
+        ? `<div class="recipe">${recipe.recipeLabel}</div>`
         : '';
       div.innerHTML = `
         <div class="chip" style="background:${c.hex}; color:${lum>140?'#000':'#fff'}; text-shadow:none;">${i+1}</div>
@@ -1943,7 +1943,7 @@
   function buildPaletteExportCanvas(palette, recipes){
     const cols = recipes ? 2 : 4;
     const rows = Math.ceil(palette.length/cols);
-    const cellW = recipes ? 460 : 280, cellH = recipes ? 108 : 90, pad = 20, headerH = 60;
+    const cellW = recipes ? 460 : 280, cellH = 90, pad = 20, headerH = 60;
     const w = cols*cellW + pad*2;
     const h = rows*cellH + pad*2 + headerH;
     paletteExportCanvas.width = w; paletteExportCanvas.height = h;
@@ -1982,8 +1982,6 @@
         ctx.font = '12px Arial, sans-serif';
         ctx.fillStyle = '#2b2a28';
         ctx.fillText(recipe.recipeLabel, x+72, y+66, cellW-84);
-        ctx.fillStyle = '#5a544c';
-        ctx.fillText(`ΔE ${recipe.deltaE.toFixed(1)}`, x+72, y+84);
       }
     });
   }

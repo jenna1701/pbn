@@ -42,7 +42,7 @@ A save action downloads three PNG files: the paint-by-numbers image itself, the 
 
 ## Matching legend colors to real paints
 
-A "Paint Brand" dropdown lets you match each legend color to an actual paint-mixing recipe from a real paint set, instead of just a hex code. Pick a brand and every swatch in the legend (and in the exported palette PNG) also shows something like "4 parts Colbalt Blue #0512 + 2 parts Carmine Red #0318 + 4 parts Yellow Ochre #0227", plus a ΔE value showing how close that mixture is to the target color (lower is a closer match). Recipes are found using the [mixbox](https://github.com/scrtwpns/mixbox) pigment-mixing model, which simulates how real paints blend rather than just averaging RGB values, and are computed once per brand and cached, so switching back and forth is instant after the first time.
+A "Paint Brand" dropdown lets you match each legend color to an actual paint-mixing recipe from a real paint set, instead of just a hex code. Pick a brand and every swatch in the legend (and in the exported palette PNG) also shows something like "4 parts Yellow Ochre + 4 parts Colbalt Blue + 2 parts Carmine Red", listed from the most-used paint to the least. Recipes are found using the [mixbox](https://github.com/scrtwpns/mixbox) pigment-mixing model, which simulates how real paints blend rather than just averaging RGB values, and are computed once per brand and cached, so switching back and forth is instant after the first time.
 
 Kolor Kingdom (a 24-color acrylic set) is the only brand included today, but the list is data-driven — see below for how to add another.
 
@@ -59,7 +59,7 @@ Adding a brand is a data-only change; no changes to the app's logic are needed a
      // ...one entry per paint in the set: hex color -> manufacturer code + name
    };
    ```
-   The `code` field is optional (it's shown in recipes when present, e.g. "#0105") but `name` is required.
+   The `code` field is optional and reserved for future use, but `name` is required.
 2. Add one entry to `palettes/manifest.js`:
    ```js
    { id: "your-brand-id", label: "Your Brand Name (description)", file: "your-brand-id.js" }

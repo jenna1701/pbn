@@ -171,11 +171,12 @@
 
   function formatRecipeLabel(recipeEntry, paints) {
     return recipeEntry
+      .slice()
+      .sort((a, b) => b[1] - a[1])
       .map(([idx, parts]) => {
         const p = paints[idx];
         const unit = parts === 1 ? "part" : "parts";
-        const code = p.code ? ` #${p.code}` : "";
-        return `${parts} ${unit} ${p.name}${code}`;
+        return `${parts} ${unit} ${p.name}`;
       })
       .join(" + ");
   }
