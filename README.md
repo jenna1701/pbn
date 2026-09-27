@@ -74,4 +74,4 @@ Resize and crop, color count, smoothing, style, and number visibility can all be
 
 
 
-*Code written by Claude Sonnet 5.*
+*Code written by Claude Sonnet 5, with some updates by Gemini 3.1 Pro.*
