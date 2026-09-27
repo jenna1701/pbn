@@ -169,7 +169,15 @@
     return { recipes, rgb: rgbList, lab, model, paints };
   }
 
-  function formatRecipeLabel(recipeEntry, paints) {
+function formatRecipeLabel(recipeEntry, paints) {
+    // If the recipe only uses 1 color, override the parts count to just say "1 part"
+    if (recipeEntry.length === 1) {
+      const colorIndex = recipeEntry[0][0];
+      const p = paints[colorIndex];
+      return `1 part ${p.name}`;
+    }
+
+    // Otherwise, format the multi-color recipe normally
     return recipeEntry
       .slice()
       .sort((a, b) => b[1] - a[1])
