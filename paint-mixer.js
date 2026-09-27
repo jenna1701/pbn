@@ -181,6 +181,83 @@
       .join(" + ");
   }
 
+  // ---------- upgraded distance math (CIEDE2000) ----------
+  function deltaE2000(l1, a1, b1, l2, a2, b2) {
+    const rad2deg = 180 / Math.PI;
+    const deg2rad = Math.PI / 180;
+
+    // Chroma
+    const c1 = Math.sqrt(a1 * a1 + b1 * b1);
+    const c2 = Math.sqrt(a2 * a2 + b2 * b2);
+    const cBar = (c1 + c2) / 2;
+
+    const g = 0.5 * (1 - Math.sqrt(Math.pow(cBar, 7) / (Math.pow(cBar, 7) + Math.pow(25, 7))));
+    const a1Prime = a1 * (1 + g);
+    const a2Prime = a2 * (1 + g);
+
+    const c1Prime = Math.sqrt(a1Prime * a1Prime + b1 * b1);
+    const c2Prime = Math.sqrt(a2Prime * a2Prime + b2 * b2);
+    const cBarPrime = (c1Prime + c2Prime) / 2;
+
+    // Hue angles
+    let h1Prime = 0;
+    if (a1Prime !== 0 || b1 !== 0) {
+      h1Prime = Math.atan2(b1, a1Prime) * rad2deg;
+      if (h1Prime < 0) h1Prime += 360;
+    }
+    
+    let h2Prime = 0;
+    if (a2Prime !== 0 || b2 !== 0) {
+      h2Prime = Math.atan2(b2, a2Prime) * rad2deg;
+      if (h2Prime < 0) h2Prime += 360;
+    }
+
+    // Hue differences
+    let deltaHPrime = 0;
+    if (c1Prime !== 0 && c2Prime !== 0) {
+      deltaHPrime = h2Prime - h1Prime;
+      if (deltaHPrime > 180) deltaHPrime -= 360;
+      else if (deltaHPrime < -180) deltaHPrime += 360;
+    }
+
+    const deltaCapHPrime = 2 * Math.sqrt(c1Prime * c2Prime) * Math.sin((deltaHPrime / 2) * deg2rad);
+    const deltaLPrime = l2 - l1;
+    const deltaCPrime = c2Prime - c1Prime;
+
+    // Average hue
+    let hBarPrime = h1Prime + h2Prime;
+    if (c1Prime !== 0 && c2Prime !== 0) {
+      if (Math.abs(h1Prime - h2Prime) > 180) {
+        hBarPrime = (h1Prime + h2Prime + 360) / 2;
+      } else {
+        hBarPrime = (h1Prime + h2Prime) / 2;
+      }
+    }
+
+    const t = 1 -
+      0.17 * Math.cos((hBarPrime - 30) * deg2rad) +
+      0.24 * Math.cos((2 * hBarPrime) * deg2rad) +
+      0.32 * Math.cos((3 * hBarPrime + 6) * deg2rad) -
+      0.20 * Math.cos((4 * hBarPrime - 63) * deg2rad);
+
+    const lBar = (l1 + l2) / 2;
+    const sl = 1 + (0.015 * Math.pow(lBar - 50, 2)) / Math.sqrt(20 + Math.pow(lBar - 50, 2));
+    const sc = 1 + 0.045 * cBarPrime;
+    const sh = 1 + 0.015 * cBarPrime * t;
+
+    const deltaTheta = 30 * Math.exp(-Math.pow((hBarPrime - 275) / 25, 2));
+    const rc = 2 * Math.sqrt(Math.pow(cBarPrime, 7) / (Math.pow(cBarPrime, 7) + Math.pow(25, 7)));
+    const rt = -Math.sin(2 * deltaTheta * deg2rad) * rc;
+
+    // Finally, the Delta E 2000 formula (assuming kl=1, kc=1, kh=1 standard)
+    return Math.sqrt(
+      Math.pow(deltaLPrime / sl, 2) +
+      Math.pow(deltaCPrime / sc, 2) +
+      Math.pow(deltaCapHPrime / sh, 2) +
+      rt * (deltaCPrime / sc) * (deltaCapHPrime / sh)
+    );
+  }
+
   // ---------- query ----------
   // hexArray: [ "#RRGGBB", ... ] -> parallel array of
   // { recipeLabel, deltaE, resultHex } | null (null if table is empty)
@@ -188,21 +265,36 @@
     const count = table.recipes.length;
     return hexArray.map((hex) => {
       if (count === 0) return null;
+      
       const [r, g, b] = hexToRgb(hex);
       const targetLab = rgb2lab(r, g, b);
       const lab = table.lab;
-      let bestIdx = -1, bestD2 = Infinity;
+      
+      let bestIdx = -1;
+      let bestDE = Infinity;
+      
       for (let i = 0; i < count; i++) {
-        const dl = lab[i * 3] - targetLab[0];
-        const da = lab[i * 3 + 1] - targetLab[1];
-        const db = lab[i * 3 + 2] - targetLab[2];
-        const d2 = dl * dl + da * da + db * db;
-        if (d2 < bestD2) { bestD2 = d2; bestIdx = i; }
+        // Extract L, a, b from the Float32Array
+        const l1 = lab[i * 3];
+        const a1 = lab[i * 3 + 1];
+        const b1 = lab[i * 3 + 2];
+        
+        // Calculate CIEDE2000 instead of Euclidean distance
+        const de = deltaE2000(l1, a1, b1, targetLab[0], targetLab[1], targetLab[2]);
+        
+        if (de < bestDE) { 
+          bestDE = de; 
+          bestIdx = i; 
+        }
+
+        // Optimization: Early exit if perceptually indistinguishable (< 0.5)
+        if (bestDE < 0.5) break;
       }
+      
       const rgb = table.rgb[bestIdx];
       return {
         recipeLabel: formatRecipeLabel(table.recipes[bestIdx], table.paints),
-        deltaE: Math.sqrt(bestD2),
+        deltaE: bestDE, // Note: Returned value is now Delta E 2000
         resultHex: rgbToHex(rgb[0], rgb[1], rgb[2]),
       };
     });
@@ -217,3 +309,4 @@
     rgb2lab,
   };
 })(window);
+
