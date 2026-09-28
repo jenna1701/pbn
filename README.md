@@ -44,7 +44,7 @@ A save action downloads three PNG files: the paint-by-numbers image itself, the 
 
 A "Paint Brand" dropdown lets you match each legend color to an actual paint-mixing recipe from a real paint set, instead of just a hex code. Pick a brand and every swatch in the legend (and in the exported palette PNG) also shows something like "4 parts Yellow Ochre + 4 parts Colbalt Blue + 2 parts Carmine Red", listed from the most-used paint to the least. Recipes are found using the [mixbox](https://github.com/scrtwpns/mixbox) pigment-mixing model, which simulates how real paints blend rather than just averaging RGB values, and are computed once per brand and cached, so switching back and forth is instant after the first time.
 
-Kolor Kingdom (a 24-color acrylic set) is the only brand included today, but the list is data-driven — see below for how to add another.
+Kolor Kingdom (24-color acrylic set) and Mont Marte (24-color acrylic set) are the only brands included today, but the list is data-driven — see below for how to add another.
 
 ### Adding a new paint brand
 
