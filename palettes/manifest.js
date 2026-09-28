@@ -6,5 +6,6 @@
 // Loaded via a plain <script src> rather than fetch()/XHR so this works
 // whether the page is opened directly (file://) or served over http(s).
 window.PBN_PALETTE_MANIFEST = [
-  { id: "kolor-kingdom", label: "Kolor Kingdom (24-color acrylic set)", file: "kolor-kingdom.js" }
+  { id: "kolor-kingdom", label: "Kolor Kingdom (24-color acrylic set)", file: "kolor-kingdom.js" },
+  { id: "mont-marte", label: "Mont Marte (24-color acrylic set)", file: "mont-marte.js" }
 ];
