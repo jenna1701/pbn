@@ -24,6 +24,10 @@ An adjustable smoothing setting controls how clean and simplified the final regi
 
 A separate Line Smoothing setting runs as a final cleanup pass over the finished outlines, rounding off small, wiggly offshoots along region borders so the shapes are easier to trace and paint. It doesn't change the palette or how many colors are used. On the rare occasion it smooths a region apart into two separate pieces, both pieces still get correctly numbered.
 
+## Detail regions
+
+Clicking and dragging directly on the image lets you mark boxes around areas that need extra detail, such as faces or fine focal points, while still applying full smoothing to the rest of the picture. Boxes can be moved, resized, or rotated using the handle above each box (holding the shift key snaps rotation to 15° increments). Inside boxed regions, smoothing passes are reduced, tiny shapes are protected from being merged away, and extra colors are sampled into the clustering step while ensuring no duplicate colors appear in the final palette.
+
 ## Numbering behavior
 
 Numbers are placed at the most interior point of each region — the spot farthest from any outline — so they stay readable and don't overlap the region's edges. Regions that are too small or too thin to fit a number cleanly are simply left unlabeled rather than crowding the image. If two candidate labels would end up landing too close together, the smaller region's label is skipped in favor of the larger one. For regions that are large or spread out — a big sky, or a long, winding, branching shape — the same number is repeated at several well-spaced interior points across the region, so it's always clear which color to use no matter where you're currently painting. Numbers can also be turned off entirely if you only want the outlines.
@@ -68,10 +72,10 @@ Adding a brand is a data-only change; no changes to the app's logic are needed a
 
 ## Re-running with different settings
 
-Resize and crop, color count, smoothing, style, and number visibility can all be adjusted and re-generated as many times as you like without re-uploading the image, so you can quickly compare different levels of detail and simplification.
+Resize and crop, detail regions, color count, smoothing, style, and number visibility can all be adjusted and re-generated as many times as you like without re-uploading the image, so you can quickly compare different levels of detail and simplification.
 
 ## 
 
 
 
-*Code written by Claude Sonnet 5, with some updates by Gemini 3.1 Pro.*
+*Code written by Claude Sonnet 5, with some updates by Gemini 3.1 Pro/3.8 Flash.*
