@@ -78,4 +78,4 @@ Resize and crop, detail regions, color count, smoothing, style, and number visib
 
 
 
-*Code written by Claude Sonnet 5, with some updates by Gemini 3.1 Pro/3.8 Flash.*
+*Code written by Claude Sonnet 5/Sonnet 5.5, with some updates by Gemini 3.1 Pro/3.8 Flash.*

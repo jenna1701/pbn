@@ -2044,12 +2044,11 @@
       ctx.font = '13px Arial, sans-serif';
       ctx.fillStyle = '#5a544c';
       ctx.fillText(`RGB(${c.r}, ${c.g}, ${c.b})`, x+72, y+30);
-      ctx.fillText(`Color #${i+1}`, x+72, y+48);
       const recipe = recipes && recipes[i];
       if (recipe){
         ctx.font = '12px Arial, sans-serif';
         ctx.fillStyle = '#2b2a28';
-        ctx.fillText(recipe.recipeLabel, x+72, y+66, cellW-84);
+        ctx.fillText(recipe.recipeLabel, x+72, y+50, cellW-84);
       }
     });
   }
