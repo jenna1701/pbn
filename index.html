@@ -10,9 +10,11 @@
     --border:#dcd7cf; --muted:#7a746b;
   }
   *{box-sizing:border-box;}
+  html,body{height:100%;}
   body{
     margin:0; font-family:'Segoe UI',system-ui,-apple-system,Arial,sans-serif;
     background:var(--bg); color:var(--ink);
+    display:flex; flex-direction:column; overflow:hidden;
   }
   header{
     padding:8px 28px; background:var(--panel); border-bottom:1px solid var(--border);
@@ -20,13 +22,13 @@
   header h1{margin:0; font-size:22px; letter-spacing:.3px;}
   header p{margin:2px 0 0; color:var(--muted); font-size:13px;}
   .layout{
-    display:flex; gap:20px; padding:20px 28px; align-items:flex-start; flex-wrap:wrap;
+    display:flex; gap:16px; padding:14px 20px; align-items:stretch; flex:1; min-height:0;
   }
   .panel{
     background:var(--panel); border:1px solid var(--border); border-radius:10px;
     padding:18px; box-shadow:0 1px 3px rgba(0,0,0,0.04);
   }
-  .controls{width:300px; flex:0 0 300px; position:sticky; top:20px;}
+  .controls{width:300px; flex:0 0 300px; overflow-y:auto; min-height:0;}
   .controls h2{font-size:14px; text-transform:uppercase; letter-spacing:.06em; color:var(--muted); margin:0;}
   .collapsible{border-bottom:1px solid var(--border); margin-bottom:14px; padding-bottom:14px;}
   .collapsible:last-of-type{border-bottom:none; margin-bottom:0; padding-bottom:0;}
@@ -69,14 +71,27 @@
   button.ghost:hover{background:#e4e0d7;}
   button:disabled{opacity:.5; cursor:not-allowed;}
   .status{font-size:12px; color:var(--muted); min-height:16px; margin-top:4px;}
-  .outputs{flex:1; min-width:320px; display:flex; flex-direction:column; gap:20px;}
-  .canvas-wrap{overflow:auto; max-height:960px; border:1px solid var(--border); border-radius:8px; background:#fafafa; padding:10px;}
-  .canvas-wrap canvas{display:block; max-width:100%; image-rendering:pixelated;}
-  .canvas-wrap canvas.fitwidth{width:100%; height:auto; image-rendering:auto;}
-  .section-title{font-size:14px; font-weight:700; margin:0 0 8px;}
-  .palette-grid{
-    display:grid; grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); gap:10px;
+  .outputs{flex:1; min-width:0; display:flex; gap:16px; min-height:0;}
+  .viewer{flex:1; min-width:0; display:flex; flex-direction:column; padding:12px; min-height:0;}
+  .tabs{display:flex; gap:6px; margin-bottom:8px; flex:0 0 auto;}
+  .tab{
+    width:auto; margin:0; padding:8px 16px; background:#efece6; color:var(--ink);
+    border-radius:6px 6px 0 0; font-size:13px;
   }
+  .tab:hover{background:#e4e0d7;}
+  .tab.active{background:var(--accent); color:#fff;}
+  .stage{
+    flex:1; min-height:0; position:relative; overflow:hidden; border:1px solid var(--border);
+    border-radius:8px; background:#fafafa; display:flex; align-items:center; justify-content:center;
+  }
+  .view{display:none; align-items:center; justify-content:center; width:100%; height:100%;}
+  .view.active{display:flex;}
+  .view .fitbox{position:relative; flex:0 0 auto;}
+  .view canvas{display:block; width:100%; height:100%;}
+  .view-hint{font-size:11px; color:var(--muted); margin-top:6px; flex:0 0 auto;}
+  .legend{width:260px; flex:0 0 260px; overflow-y:auto; min-height:0; padding:12px;}
+  .section-title{font-size:14px; font-weight:700; margin:0 0 8px;}
+  .palette-grid{display:grid; grid-template-columns:1fr; gap:6px;}
   .swatch{
     display:flex; align-items:center; gap:8px; border:1px solid var(--border); border-radius:6px;
     padding:6px 8px; background:#fff;
@@ -114,7 +129,7 @@
      See the JS coordinate-mapping comments for how these same boxes are
      converted to exact full-resolution pixel coordinates for processing.
      --------------------------------------------------------------------- */
-  #boxStage{position:relative; display:block; width:100%;}
+  #boxStage{position:relative; display:block;}
   #boxOverlay{position:absolute; inset:0; cursor:crosshair;}
   .detail-box{
     position:absolute; border:2px solid var(--accent); background:rgba(192,90,44,0.14);
@@ -273,27 +288,27 @@
   </div>
 
   <div class="outputs">
-    <div class="panel" id="boxPanel" style="display:none;">
-      <p class="section-title">Mark Detail Regions</p>
-      <div class="hint">Drag a corner dot to resize, drag the box body to move it, click the × to delete it.</div>
-      <div class="canvas-wrap">
-        <div id="boxStage">
-          <canvas id="boxDisplayCanvas" class="fitwidth"></canvas>
-          <div id="boxOverlay"></div>
-        </div>
+    <div class="panel viewer">
+      <div class="tabs">
+        <button class="tab active" data-view="viewBox">Detail Regions</button>
+        <button class="tab" data-view="viewPreview">Color Preview</button>
+        <button class="tab" data-view="viewOutline">Paint-by-Numbers</button>
       </div>
+      <div class="stage" id="stage">
+        <div class="view active" id="viewBox">
+          <div class="fitbox" id="boxStage">
+            <canvas id="boxDisplayCanvas"></canvas>
+            <div id="boxOverlay"></div>
+          </div>
+        </div>
+        <div class="view" id="viewPreview"><div class="fitbox"><canvas id="previewCanvas"></canvas></div></div>
+        <div class="view" id="viewOutline"><div class="fitbox"><canvas id="outlineCanvas"></canvas></div></div>
+      </div>
+      <div class="view-hint" id="viewHint">Drag on the image to draw a box; drag a corner dot to resize, the body to move, × to delete.</div>
     </div>
-    <div class="panel">
-      <p class="section-title">Color Preview (posterized fill)</p>
-      <div class="canvas-wrap"><canvas id="previewCanvas" class="fitwidth"></canvas></div>
-    </div>
-    <div class="panel">
+    <div class="panel legend">
       <p class="section-title">Color Palette / Legend</p>
       <div class="palette-grid" id="paletteGrid"></div>
-    </div>
-    <div class="panel">
-      <p class="section-title">Paint-by-Numbers Output</p>
-      <div class="canvas-wrap"><canvas id="outlineCanvas" class="fitwidth"></canvas></div>
     </div>
   </div>
 
@@ -382,7 +397,7 @@
   const paintBrandStatus = document.getElementById('paintBrandStatus');
 
   // ---------- Detail-box DOM references ----------
-  const boxPanel          = document.getElementById('boxPanel');
+  const stageEl           = document.getElementById('stage');
   const boxStage          = document.getElementById('boxStage');
   const boxDisplayCanvas  = document.getElementById('boxDisplayCanvas');
   const boxOverlay        = document.getElementById('boxOverlay');
@@ -466,11 +481,38 @@
     boxDisplayCanvas.width = w; boxDisplayCanvas.height = h;
     drawWorkingImage(boxDisplayCanvas.getContext('2d'), w, h, cropSx, cropSy, cropSw, cropSh);
     detailBoxes = []; nextBoxId = 1;
-    boxPanel.style.display = 'block';
     addBoxBtn.disabled = false; clearBoxesBtn.disabled = false;
+    fitViews();
     renderBoxOverlay();
     updateBoxStatus();
   }
+
+  // Sizes each canvas's box to the largest size that fits the stage without scrolling.
+  function fitViews(){
+    const sw = stageEl.clientWidth, sh = stageEl.clientHeight;
+    document.querySelectorAll('.view .fitbox').forEach(box => {
+      const cv = box.querySelector('canvas');
+      if (!cv.width || !cv.height || !sw || !sh) return;
+      const s = Math.min(sw / cv.width, sh / cv.height);
+      box.style.width = Math.floor(cv.width * s) + 'px';
+      box.style.height = Math.floor(cv.height * s) + 'px';
+    });
+  }
+  new ResizeObserver(fitViews).observe(stageEl);
+
+  const viewHints = {
+    viewBox: 'Drag on the image to draw a box; drag a corner dot to resize, the body to move, × to delete.',
+    viewPreview: 'Posterized color preview.',
+    viewOutline: 'Paint-by-numbers output.'
+  };
+  function showTab(viewId){
+    document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.view === viewId));
+    document.querySelectorAll('.view').forEach(v => v.classList.toggle('active', v.id === viewId));
+    document.getElementById('viewHint').textContent = viewHints[viewId];
+  }
+  document.querySelectorAll('.tab').forEach(tab => {
+    tab.addEventListener('click', () => showTab(tab.dataset.view));
+  });
 
   // ---------- UI wiring ----------
   document.querySelectorAll('.collapsible-header').forEach((header) => {
@@ -844,6 +886,7 @@
 
   addBoxBtn.addEventListener('click', () => {
     if (!sourceImage) return;
+    showTab('viewBox');
     const size = 0.22;
     // stagger repeated "Add Box" clicks slightly so new boxes don't stack exactly on top of each other
     const jitter = ((detailBoxes.length % 5) * 0.03);
@@ -1359,6 +1402,7 @@
     });
 
     renderOutputs(finalStructure, w, h, printable, showNumbers.checked);
+    fitViews();
     renderPaletteLegend(lastPalette, lastRecipes);
   }
 
